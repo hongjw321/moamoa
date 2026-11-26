@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fff0f5">
+  <meta name="description" content="모아모아 - 나만의 귀여운 친구들을 모으는 작은 행복">
+  <title>모아모아 MOAMOA - Collect Your Little Friends</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#home" aria-label="모아모아 홈">
+      <span class="brand-mark">🐰</span>
+      <span><strong>MOAMOA</strong><small>Collect Your Little Friends!</small></span>
+    </a>
+    <button class="mobile-menu" id="menuToggle" aria-label="메뉴 열기">☰</button>
+    <nav id="mainNav">
+      <a href="#home" class="nav-link active">🏠 홈</a>
+      <a href="#gacha" class="nav-link">🎁 가챠</a>
+      <a href="#collection" class="nav-link">📖 캐릭터 도감</a>
+      <a href="#shop" class="nav-link">🛍️ 샵</a>
+      <a href="#event" class="nav-link">🎀 이벤트</a>
+    </nav>
+    <a class="mypage-link" href="#mypage">🐻 마이페이지 <span>⌄</span></a>
+  </header>
+
+  <main>
+    <section class="hero page-section" id="home">
+      <div class="hero-copy">
+        <span class="eyebrow">A LITTLE WORLD FULL OF HAPPINESS</span>
+        <h1>모아모아와 함께하는<br><em>행복한 캐릭터 수집!</em></h1>
+        <p>작고 소중한 친구들을 만나고<br>나만의 컬렉션을 완성해 보세요.</p>
+        <a class="primary-btn" href="#gacha">무료 체험 뽑기 <span>🎁</span></a>
+        <div class="hero-note">✨ 첫 방문이라면 무료 뽑기 1회를 드려요!</div>
+      </div>
+      <div class="hero-art" aria-label="귀여운 동물 친구들과 캡슐 뽑기 기계">
+        <div class="cloud cloud-one"></div><div class="cloud cloud-two"></div>
+        <div class="sparkle s1">✦</div><div class="sparkle s2">✧</div><div class="sparkle s3">★</div>
+        <div class="gacha-machine">
+          <div class="machine-label">MOAMOA</div>
+          <div class="machine-globe"><span>🩷</span><span>💛</span><span>💙</span><span>💜</span><span>🤍</span><span>🩵</span></div>
+          <div class="machine-base"><div class="machine-slot">?</div></div>
+        </div>
+        <div class="mascot mascot-bear">🐻</div>
+        <div class="mascot mascot-bunny">🐰</div>
+        <div class="mascot mascot-penguin">🐧</div>
+        <div class="mascot mascot-chick">🐥</div>
+        <div class="mascot mascot-cat">🐱</div>
+      </div>
+      <aside class="user-mini">
+        <div class="user-greeting"><span class="avatar">🐰</span><div>반가워요!<strong>모아러버님 💗</strong></div></div>
+        <div class="collection-progress"><span>⭐</span><div><small>보유 캐릭터</small><strong id="ownedCount">0 / 6</strong><div class="progress"><i id="progressBar"></i></div></div></div>
+        <a href="#collection">📖 내 컬렉션 <b>›</b></a>
+        <a href="#mypage">📦 뽑기 기록 <b>›</b></a>
+        <a href="#mypage">⚙️ 설정 <b>›</b></a>
+      </aside>
+    </section>
+
+    <section class="feature-grid page-section">
+      <article class="feature-card new-card">
+        <div><span class="eyebrow">✨ NEW FRIENDS</span><h2>포근한 친구들이<br>새롭게 찾아왔어요!</h2><p>지금 바로 새로운 캐릭터를 만나보세요 💕</p><a class="soft-btn" href="#collection">신규 캐릭터 보기 ›</a></div>
+        <div class="feature-mascot">🐱</div>
+      </article>
+      <article class="feature-card ranking-card">
+        <h3>👑 인기 캐릭터 TOP 3</h3>
+        <div class="ranking-list">
+          <div><b>🥇</b><span>🐰</span><strong>토리</strong><small>전설</small></div>
+          <div><b>🥈</b><span>🐻</span><strong>몽이</strong><small>희귀</small></div>
+          <div><b>🥉</b><span>🐧</span><strong>팽구</strong><small>일반</small></div>
+        </div>
+      </article>
+      <article class="feature-card event-card">
+        <span class="eyebrow">WELCOME EVENT</span><h2>무료 체험<br>가챠 이벤트!</h2><p>모아모아의 첫 친구를 만나보세요.</p><a class="primary-btn small" href="#gacha">이벤트 참여하기 ›</a><span class="gift-art">🎁</span>
+      </article>
+    </section>
+
+    <section class="section-block page-section" id="gacha">
+      <div class="section-heading"><div><span class="eyebrow">TRY YOUR LUCK</span><h2>오늘의 친구 뽑기 🎁</h2><p>어떤 친구가 찾아올까요? 두근두근!</p></div><span class="free-pill">FREE TRIAL</span></div>
+      <div class="gacha-panel">
+        <div class="gacha-visual"><div class="big-machine"> <div class="big-machine-top">MOAMOA</div><div class="capsule-window">🩷 💛 💙<br>💜 🤍 🩵</div><div class="big-machine-foot"> <span>⬇</span> </div></div></div>
+        <div class="gacha-info"><span class="eyebrow">WELCOME GACHA</span><h3>첫 만남 무료 뽑기</h3><p>모아모아 친구 중 한 명을 랜덤으로 만나요.<br>무료 체험은 브라우저당 1회 제공됩니다.</p><div class="gacha-meta"><span>🎟️ 무료 체험권</span><strong id="ticketStatus">1회 남음</strong></div><button id="drawButton" class="primary-btn draw-btn">친구 뽑기 시작! ✨</button><small class="demo-note">※ 현재 버전은 체험용 데모입니다. 결과는 이 브라우저에 저장됩니다.</small></div>
+      </div>
+      <div class="result-panel" id="resultPanel" hidden aria-live="polite"><div class="result-glow">✨</div><div class="result-character" id="resultEmoji">🐰</div><span class="eyebrow">NEW FRIEND FOUND!</span><h3 id="resultName">토리</h3><p id="resultDescription">호기심 가득한 토끼 친구</p><span class="rarity" id="resultRarity">RARE</span><button class="soft-btn" id="closeResult">컬렉션에 담기 💗</button></div>
+    </section>
+
+    <section class="section-block page-section" id="collection">
+      <div class="section-heading"><div><span class="eyebrow">MY LITTLE FRIENDS</span><h2>캐릭터 도감 📖</h2><p>친구들을 하나씩 모아 도감을 완성해 보세요.</p></div><span class="collection-count" id="collectionCount">0 / 6 수집</span></div>
+      <div class="character-grid" id="characterGrid"></div>
+    </section>
+
+    <section class="section-block page-section" id="shop">
+      <div class="section-heading"><div><span class="eyebrow">MOAMOA SHOP</span><h2>친구들과 함께하는 굿즈 🛍️</h2><p>좋아하는 캐릭터를 일상에서도 만나보세요.</p></div><span class="coming-pill">COMING SOON</span></div>
+      <div class="shop-grid">
+        <article class="shop-item"><div class="product-art pink">📱🐰</div><h3>모아모아 케이스</h3><p>나만의 친구와 매일 함께</p><strong>₩24,900</strong><span class="product-state">준비 중</span></article>
+        <article class="shop-item"><div class="product-art yellow">🔑🐻</div><h3>모아모아 키링</h3><p>가방에 달랑달랑 귀여움</p><strong>₩12,900</strong><span class="product-state">준비 중</span></article>
+        <article class="shop-item"><div class="product-art blue">🫧🐱</div><h3>모아모아 그립톡</h3><p>손안에 쏙 들어오는 친구</p><strong>₩9,900</strong><span class="product-state">준비 중</span></article>
+        <article class="shop-item"><div class="product-art lilac">💌🐧</div><h3>모아모아 스티커 세트</h3><p>어디든 붙이는 작은 행복</p><strong>₩6,900</strong><span class="product-state">준비 중</span></article>
+      </div>
+    </section>
+
+    <section class="event-banner page-section" id="event"><div><span class="eyebrow">SPECIAL SEASON EVENT</span><h2>모아모아의 작은 축제 🌸</h2><p>시즌마다 새로운 친구와 이야기가 찾아와요.</p><a href="#gacha" class="soft-btn">무료 뽑기 체험하기 ›</a></div><div class="event-character">🐰🌷</div></section>
+
+    <section class="section-block page-section mypage-section" id="mypage">
+      <div class="section-heading"><div><span class="eyebrow">YOUR MOAMOA</span><h2>마이페이지 💗</h2><p>나의 수집 현황과 체험 기록을 확인해요.</p></div></div>
+      <div class="mypage-card"><div class="mypage-avatar">🐰</div><div><h3>모아러버님</h3><p>모아모아와 함께한 수집 여정</p><strong id="mypageStats">수집한 친구 0명 · 무료 뽑기 0회</strong></div><a class="soft-btn" href="#collection">내 도감 보기 ›</a></div>
+      <div class="history-card"><h3>🎟️ 뽑기 기록</h3><ul id="historyList"><li class="empty-history">아직 뽑기 기록이 없어요. 첫 친구를 만나볼까요?</li></ul></div>
+    </section>
+  </main>
+  <footer><a class="brand footer-brand" href="#home"><span class="brand-mark">🐰</span><span><strong>MOAMOA</strong><small>Collect Your Little Friends!</small></span></a><p>작은 행운을 모으는 곳, 모아모아 💗</p><small>© 2026 MOAMOA. Demo project.</small></footer>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>
