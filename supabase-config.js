@@ -1,7 +1,6 @@
 // Supabase public project settings.
-// Replace these two values with your own Supabase Project URL and anon/public key.
-// NEVER put a service_role key in this file.
+// Publishable keys are intended for browser use. Never put a secret/service_role key here.
 window.MOAMOA_SUPABASE_CONFIG = {
-  url: "YOUR_SUPABASE_PROJECT_URL",
-  anonKey: "YOUR_SUPABASE_ANON_KEY"
+  url: "https://gugyczralmtvowfhulqe.supabase.co",
+  anonKey: "sb_publishable_zFZn6zm63WdUUvdfL1zXww_99ZEND1t"
 };
