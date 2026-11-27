@@ -2,7 +2,11 @@
   const cfg=window.MOAMOA_SUPABASE_CONFIG||{};
   const configured=cfg.url&&cfg.anonKey&&!cfg.url.includes("YOUR_")&&!cfg.anonKey.includes("YOUR_");
   window.MOAMOA_CLOUD={configured,user:null,client:null,ready:false};
-  if(!configured||!window.supabase){console.info("MOAMOA cloud sync is waiting for Supabase project settings.");return;}
+  const accountStatus=document.getElementById("accountStatus");
+  if(!configured||!window.supabase){
+    if(accountStatus)accountStatus.textContent="현재는 이 브라우저에만 저장 중이에요. Supabase 연결 후 계정 동기화를 사용할 수 있어요.";
+    console.info("MOAMOA cloud sync is waiting for Supabase project settings.");return;
+  }
   const client=window.supabase.createClient(cfg.url,cfg.anonKey);
   window.MOAMOA_CLOUD.client=client;
   let saving=false,saveQueued=false,mergeInProgress=false;
@@ -31,6 +35,7 @@
   function queueSave(){if(!window.MOAMOA_CLOUD.user)return;saveQueued=true;setTimeout(()=>{if(!saving)saveCloud();},500);}
   async function loadUser(user){
     window.MOAMOA_CLOUD.user=user;
+    if(accountStatus)accountStatus.textContent="계정 연결됨 · 컬렉션과 기록을 동기화하고 있어요.";
     mergeInProgress=true;
     try{
       const local=readLocal();
@@ -41,6 +46,7 @@
       if(typeof refresh==="function")refresh();
       if(typeof renderAttendance==="function")renderAttendance();
       window.MOAMOA_CLOUD.ready=true;
+      if(accountStatus)accountStatus.textContent="클라우드 동기화 연결됨 · 다른 기기에서도 이어서 사용할 수 있어요.";
       document.dispatchEvent(new CustomEvent("moamoa:cloud-ready",{detail:{user}}));
       await saveCloud();
     }catch(error){console.error("MOAMOA cloud load failed:",error);document.dispatchEvent(new CustomEvent("moamoa:cloud-error",{detail:error.message}));}
@@ -52,7 +58,7 @@
   }
   client.auth.onAuthStateChange((event,session)=>{
     if(session&&session.user){setTimeout(()=>loadUser(session.user),0);}
-    else{window.MOAMOA_CLOUD.user=null;window.MOAMOA_CLOUD.ready=false;document.dispatchEvent(new CustomEvent("moamoa:signed-out"));}
+    else{window.MOAMOA_CLOUD.user=null;window.MOAMOA_CLOUD.ready=false;if(accountStatus)accountStatus.textContent="로그인하면 컬렉션과 출석 기록을 계정에 보관할 수 있어요.";document.dispatchEvent(new CustomEvent("moamoa:signed-out"));}
   });
   client.auth.getSession().then(({data,error})=>{
     if(error)console.error(error);
