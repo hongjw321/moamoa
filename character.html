@@ -1,1 +1,38 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#fff0f6"><title>캐릭터 프로필 | MOAMOA</title><link rel="stylesheet" href="styles.css"></head><body><header class="top"><a class="brand" href="index.html"><span><b>MOAMOA</b><small>Collect Your Little Friends!</small></span></a><button class="hamb" id="hamb" aria-label="메뉴 열기">MENU</button><nav id="nav"><a href="index.html">홈</a><a href="gacha.html">무료 뽑기</a><a href="collection.html">캐릭터 도감</a><a href="shop.html">샵</a><a href="event.html">이벤트</a><a href="mypage.html">마이페이지</a></nav></header><main><section class="section"><a class="back-link" href="collection.html">← 캐릭터 도감으로 돌아가기</a><div id="characterDetail" class="detail-wrap"><p>캐릭터 정보를 불러오는 중입니다.</p></div></section></main><footer><b>MOAMOA</b><span>작은 행운을 모으는 곳, 모아모아</span><small>© 2026 MOAMOA · Demo</small></footer><script src="app.js"></script><script>const id=new URLSearchParams(location.search).get('id');const p=people.find(x=>x.id===id);const root=document.getElementById('characterDetail');if(!p){root.innerHTML='<div class="tile"><h2>캐릭터를 찾을 수 없어요.</h2><a class="btn pink" href="collection.html">도감으로 이동</a></div>';}else{const owned=data.owned.includes(p.id);root.innerHTML=`<article class="detail-card"><div class="detail-visual"><img src="${p.img}" alt="${p.name}"></div><div class="detail-info"><span class="eyebrow">MOAMOA CHARACTER PROFILE</span><span class="chip">${p.rarity}</span><h1>${p.name}</h1><p class="detail-animal">${p.animal} 친구</p><p class="detail-desc">${p.story}</p><dl class="profile-facts"><div><dt>성격</dt><dd>${p.personality}</dd></div><div><dt>좋아하는 것</dt><dd>${p.favorite}</dd></div><div><dt>대표 컬러</dt><dd>${p.color}</dd></div><div><dt>수집 상태</dt><dd>${owned?'내 컬렉션에 있어요':'아직 만나지 못했어요'}</dd></div></dl><a class="btn ${owned?'light':'pink'}" href="${owned?'collection.html':'gacha.html'}">${owned?'도감으로 돌아가기':'무료 뽑기 도전하기'}</a></div></article>`}</script></body></html>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#fff0f6">
+<meta name="description" content="모아모아 친구들의 성격과 이야기, 좋아하는 것까지 살펴보세요. 나만의 작은 친구 컬렉션을 완성해보세요.">
+<meta property="og:title" content="캐릭터 프로필 | MOAMOA"><meta property="og:description" content="작고 사랑스러운 모아모아 친구들을 만나보세요.">
+<title>캐릭터 프로필 | MOAMOA</title><link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top"><a class="brand" href="index.html"><span><b>MOAMOA</b><small>Collect Your Little Friends!</small></span></a><button class="hamb" id="hamb" aria-label="메뉴 열기">MENU</button>
+<nav id="nav"><a href="index.html">홈</a><a href="gacha.html">무료 뽑기</a><a href="collection.html">캐릭터 도감</a><a href="shop.html">샵</a><a href="event.html">이벤트</a><a href="mypage.html">마이페이지</a></nav></header>
+<main><section class="section character-profile-section"><a class="back-link" href="collection.html">← 캐릭터 도감으로 돌아가기</a><div id="characterDetail" class="detail-wrap"><p>캐릭터 정보를 불러오는 중입니다.</p></div></section></main>
+<footer><b>MOAMOA</b><span>작은 행운을 모으는 곳, 모아모아</span><small>© 2026 MOAMOA · Demo</small></footer>
+<script src="app.js"></script>
+<script>
+const characterId=new URLSearchParams(location.search).get('id');
+const character=people.find(item=>item.id===characterId);
+const detailRoot=document.getElementById('characterDetail');
+if(!character){detailRoot.innerHTML='<div class="tile"><h2>캐릭터를 찾을 수 없어요.</h2><p>도감에서 다른 친구들을 만나보세요.</p><a class="btn pink" href="collection.html">도감으로 이동</a></div>';}
+else{
+ const owned=data.owned.includes(character.id),ownedCount=new Set(data.owned).size;
+ const recommendations=people.filter(item=>item.id!==character.id).slice(0,3);
+ detailRoot.innerHTML=`
+ <article class="detail-card">
+  <div class="detail-visual"><img src="${character.img}" alt="${character.name} 캐릭터 일러스트"><div class="detail-visual-caption"><span>MOAMOA FRIEND</span><b>${character.animal} 친구</b></div></div>
+  <div class="detail-info">
+   <div class="detail-kickers"><span class="eyebrow">MOAMOA CHARACTER PROFILE</span><span class="chip">${character.rarity} 등급</span></div>
+   <h1>${character.name}</h1><p class="detail-animal">${character.personality}</p><p class="detail-desc">${character.story}</p>
+   <dl class="profile-facts"><div><dt>성격</dt><dd>${character.personality}</dd></div><div><dt>좋아하는 것</dt><dd>${character.favorite}</dd></div><div><dt>대표 컬러</dt><dd>${character.color}</dd></div><div><dt>수집 상태</dt><dd><span class="collection-state ${owned?'is-owned':'is-locked'}">${owned?'내 컬렉션에 있어요':'아직 만나지 못했어요'}</span></dd></div></dl>
+   <div class="profile-progress"><div><span>모아모아 친구 수집</span><b>${ownedCount} / 6</b></div><div class="progress-track"><i style="width:${ownedCount/people.length*100}%"></i></div></div>
+   <a class="btn ${owned?'light':'pink'}" href="${owned?'collection.html':'gacha.html'}">${owned?'내 도감 확인하기':'무료 뽑기 도전하기'}</a>
+  </div>
+ </article>
+ <section class="related-friends"><div class="heading"><div><span class="eyebrow">MEET MORE FRIENDS</span><h2>다른 친구들도 만나볼까요?</h2><p>모아모아 마을에는 더 많은 친구들이 기다리고 있어요.</p></div><a class="back-link" href="collection.html">전체 도감 보기 →</a></div>
+ <div class="related-grid">${recommendations.map(item=>`<a class="related-card" href="character.html?id=${item.id}"><img src="${item.img}" alt="${item.name} 캐릭터 일러스트"><div><span class="chip">${item.rarity}</span><h3>${item.name}</h3><p>${item.desc}</p></div><span class="related-arrow">↗</span></a>`).join('')}</div></section>`;
+}
+</script></body></html>
