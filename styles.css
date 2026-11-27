@@ -109,3 +109,15 @@ button{font-family:'Noto Sans KR',sans-serif}
 button:not(.btn):not(.auth-tab):not(.auth-reset):not(.hamb){color:#80536a}
 .auth-reset,.auth-back,.back-link{color:#b45f80}
 .auth-reset:hover,.auth-back:hover,.back-link:hover{color:#e36f98}
+
+
+/* Final global anchor reset: consistent MOAMOA link styling */
+a:link,a:visited,a:hover,a:active{color:#a85d7b!important;text-decoration:none!important}
+a:hover{color:#e36f98!important}
+a.btn:link,a.btn:visited,a.btn:hover,a.btn:active{text-decoration:none!important}
+a.btn.pink:link,a.btn.pink:visited,a.btn.pink:hover,a.btn.pink:active,
+a.btn.purple:link,a.btn.purple:visited,a.btn.purple:hover,a.btn.purple:active{color:#fff!important}
+a.btn.light:link,a.btn.light:visited,a.btn.light:hover,a.btn.light:active{color:#d95f86!important}
+.top nav a:link,.top nav a:visited{color:#80536a!important}
+.top nav a:hover,.top nav a:focus-visible{color:#cf5f86!important;background:#fff0f5}
+button,.hamb{font-family:'Noto Sans KR',sans-serif}
