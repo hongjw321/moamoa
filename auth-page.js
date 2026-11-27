@@ -4,7 +4,7 @@
  const notice=$("cloudNotice"),form=$("authForm"),submit=$("authSubmit"),message=$("authMessage");
  function showMessage(text,isError=false){message.textContent=text;message.className="auth-message "+(isError?"error":"");}
  function client(){return window.MOAMOA_CLOUD&&window.MOAMOA_CLOUD.client;}
- function setMode(next){mode=next;document.querySelectorAll(".auth-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));$("password").autocomplete=mode==="login"?"current-password":"new-password";submit.textContent=mode==="login"?"로그인":"회원가입";$("resetPassword").hidden=mode!=="login";$("signupFields").hidden=mode!=="signup";["fullName","nickname","phone","address"].forEach(id=>{const el=$(id);el.required=mode==="signup"&&(id==="fullName"||id==="nickname");});showMessage("");}
+ function setMode(next){mode=next;document.querySelectorAll(".auth-tab").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));$("password").autocomplete=mode==="login"?"current-password":"new-password";submit.textContent=mode==="login"?"로그인":"회원가입";$("resetPassword").hidden=mode!=="login";$("signupFields").hidden=mode!=="signup";["fullName","nickname","phone","address","signupConsent"].forEach(id=>{const el=$(id);el.required=mode==="signup"&&(id==="fullName"||id==="nickname"||id==="signupConsent");});showMessage("");}
  document.querySelectorAll(".auth-tab").forEach(b=>b.addEventListener("click",()=>setMode(b.dataset.mode)));
  if(!window.MOAMOA_CLOUD||!window.MOAMOA_CLOUD.configured){notice.textContent="아직 클라우드 연결 설정이 필요해요. supabase-config.js에 프로젝트 URL과 anon key를 입력하면 사용할 수 있어요.";notice.classList.add("warning");form.querySelectorAll("input,button").forEach(x=>x.disabled=true);$("resetPassword").disabled=true;}
  else{notice.textContent="클라우드 서비스 연결 준비 완료";notice.classList.add("connected");}
@@ -13,7 +13,7 @@
   const email=$("email").value.trim(),password=$("password").value;const redirectUrl="https://hongjw321.github.io/moamoa/auth.html";submit.disabled=true;showMessage("처리 중이에요...");
   try{
    if(mode==="signup"){
-    const fullName=$("fullName").value.trim(),nickname=$("nickname").value.trim(),phone=$("phone").value.trim(),address=$("address").value.trim();if(!fullName||!nickname)throw new Error("이름과 닉네임을 입력해주세요.");const {data,error}=await api.auth.signUp({email,password,options:{emailRedirectTo:redirectUrl,data:{full_name:fullName,nickname,phone,address}}});if(error)throw error;
+    const fullName=$("fullName").value.trim(),nickname=$("nickname").value.trim(),phone=$("phone").value.trim(),address=$("address").value.trim();if(!fullName||!nickname)throw new Error("이름과 닉네임을 입력해주세요.");if(!$("signupConsent").checked)throw new Error("이용약관과 개인정보 처리방침에 동의해주세요.");const {data,error}=await api.auth.signUp({email,password,options:{emailRedirectTo:redirectUrl,data:{full_name:fullName,nickname,phone,address,terms_accepted_at:new Date().toISOString(),policy_version:"2026-11-28"}}});if(error)throw error;
     showMessage(data.session?"회원가입이 완료됐어요.":"인증 메일을 확인한 뒤 로그인해주세요.");
    }else{
     const {error}=await api.auth.signInWithPassword({email,password});if(error)throw error;
