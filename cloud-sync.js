@@ -40,9 +40,10 @@
     mergeInProgress=true;
     try{
       const previousOwner=localStorage.getItem(ownerKey);
-      const local=previousOwner&&previousOwner!==user.id?null:readLocal();
       const {data:row,error}=await client.from("user_data").select("payload").eq("user_id",user.id).maybeSingle();
       if(error)throw error;
+      // Never import an unowned browser cache into an account: it may belong to a different person on a shared device.
+      const local=previousOwner===user.id?readLocal():null;
       const merged=mergeData(local,row&&row.payload);
       localStorage.setItem(storageKey,JSON.stringify(merged));
       localStorage.setItem(ownerKey,user.id);
