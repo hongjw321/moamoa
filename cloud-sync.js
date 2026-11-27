@@ -62,7 +62,7 @@
   }
   client.auth.onAuthStateChange((event,session)=>{
     if(session&&session.user){setTimeout(()=>loadUser(session.user),0);}
-    else{window.MOAMOA_CLOUD.user=null;window.MOAMOA_CLOUD.ready=false;if(accountStatus)accountStatus.textContent="로그인하면 컬렉션과 출석 기록을 계정에 보관할 수 있어요.";document.dispatchEvent(new CustomEvent("moamoa:signed-out"));}
+    else{const hadUser=!!window.MOAMOA_CLOUD.user;window.MOAMOA_CLOUD.user=null;window.MOAMOA_CLOUD.ready=false;if(event==="SIGNED_OUT"&&hadUser){localStorage.removeItem(storageKey);localStorage.removeItem(ownerKey);if(typeof refresh==="function")refresh();if(typeof renderAttendance==="function")renderAttendance();}if(accountStatus)accountStatus.textContent="로그인하면 컬렉션과 출석 기록을 계정에 보관할 수 있어요.";document.dispatchEvent(new CustomEvent("moamoa:signed-out"));}
   });
   client.auth.getSession().then(({data,error})=>{
     if(error)console.error(error);
