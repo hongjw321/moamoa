@@ -94,3 +94,18 @@
 .account-link-card{display:flex;justify-content:space-between;align-items:center;gap:14px;margin:0 0 14px;padding:16px 18px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(110deg,#fff3f7,#f3f0ff)}
 .account-link-card b{font:17px Jua}.account-link-card p{margin:5px 0 0;font-size:11px;color:#98798a}
 @media(max-width:520px){.account-link-card{align-items:flex-start;flex-direction:column}}
+
+
+/* Global navigation and link color refinement */
+a,
+a:visited{color:#a85d7b;text-decoration:none}
+a:hover{color:#e36f98;text-decoration:none}
+a:focus-visible,button:focus-visible{outline:3px solid #efabc2;outline-offset:3px;border-radius:8px}
+.top nav a,
+.top nav a:visited{color:#80536a;text-decoration:none;transition:background .2s,color .2s}
+.top nav a:hover,
+.top nav a:focus-visible{color:#cf5f86;background:#fff0f5}
+button{font-family:'Noto Sans KR',sans-serif}
+button:not(.btn):not(.auth-tab):not(.auth-reset):not(.hamb){color:#80536a}
+.auth-reset,.auth-back,.back-link{color:#b45f80}
+.auth-reset:hover,.auth-back:hover,.back-link:hover{color:#e36f98}
