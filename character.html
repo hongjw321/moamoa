@@ -12,8 +12,10 @@
 <nav id="nav"><a href="index.html">홈</a><a href="gacha.html">무료 뽑기</a><a href="collection.html">캐릭터 도감</a><a href="shop.html">샵</a><a href="event.html">이벤트</a><a href="mypage.html">마이페이지</a></nav></header>
 <main><section class="section character-profile-section"><a class="back-link" href="collection.html">← 캐릭터 도감으로 돌아가기</a><div id="characterDetail" class="detail-wrap"><p>캐릭터 정보를 불러오는 중입니다.</p></div></section></main>
 <footer><b>MOAMOA</b><span>작은 행운을 모으는 곳, 모아모아</span><small>© 2026 MOAMOA · Demo</small><div class="footer-links"><a href="terms.html">이용약관</a><a href="privacy.html">개인정보 처리방침</a></div></footer>
-<script src="app.js"></script>
+<script src="app.js"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1"></script><script src="supabase-config.js?v=20261127b"></script><script src="cloud-sync.js?v=20261128b"></script>
 <script>
+function renderCharacterDetail(){
+
 const characterId=new URLSearchParams(location.search).get('id');
 const character=people.find(item=>item.id===characterId);
 const detailRoot=document.getElementById('characterDetail');
@@ -35,4 +37,8 @@ else{
  <section class="related-friends"><div class="heading"><div><span class="eyebrow">MEET MORE FRIENDS</span><h2>다른 친구들도 만나볼까요?</h2><p>모아모아 마을에는 더 많은 친구들이 기다리고 있어요.</p></div><a class="back-link" href="collection.html">전체 도감 보기 →</a></div>
  <div class="related-grid">${recommendations.map(item=>`<a class="related-card" href="character.html?id=${item.id}"><img src="${item.img}" alt="${item.name} 캐릭터 일러스트"><div><span class="chip">${item.rarity}</span><h3>${item.name}</h3><p>${item.desc}</p></div><span class="related-arrow">↗</span></a>`).join('')}</div></section>`;
 }
+
+}
+renderCharacterDetail();
+document.addEventListener("moamoa:cloud-ready",renderCharacterDetail);
 </script></body></html>
