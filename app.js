@@ -7,9 +7,9 @@ const people=[
 {id:'mochi',name:'모찌',animal:'수달',desc:'간식을 좋아하고 물놀이를 사랑해요.',personality:'간식과 물놀이를 사랑하는 친구',story:'물가에서 조약돌을 모으고 맛있는 간식을 나누는 걸 좋아해요. 반짝이는 조약돌은 소중한 보물 상자에 보관해요.',favorite:'조개 모양 젤리',color:'민트 크림',rarity:'에픽',img:'assets/mochi.svg'}];
 const KEY='moamoa_demo_v2';let data;try{data=JSON.parse(localStorage.getItem(KEY))||{used:false,owned:[],history:[]}}catch{data={used:false,owned:[],history:[]}};data.attendance=Array.isArray(data.attendance)?data.attendance:[];data.cart=Array.isArray(data.cart)?data.cart:[];let selected=null;const $=id=>document.getElementById(id);
 function persist(){localStorage.setItem(KEY,JSON.stringify(data));refresh()}
-function refresh(){const n=new Set(data.owned).size;if($('ticket')){$('ticket').textContent=data.used?'사용 완료':'1회 남음';$('draw').disabled=data.used;$('draw').textContent=data.used?'무료 체험 완료':'친구 뽑기 시작'}if($('count'))$('count').textContent=`${n} / 6 수집`;if($('stats'))$('stats').textContent=`수집한 친구 ${n}명 · 무료 뽑기 ${data.history.length}회`;if($('history'))$('history').innerHTML=data.history.length?data.history.slice().reverse().map(x=>`<li>${x.date} · ${x.name} 친구를 만났어요</li>`).join(''):'<li>아직 뽑기 기록이 없어요.</li>';if($('characters'))renderCollection()}
+function refresh(){const n=new Set(data.owned).size;if($('ticket')){$('ticket').textContent=data.used?'사용 완료':'1회 남음';$('draw').disabled=data.used;$('draw').textContent=data.used?'무료 체험 완료':'친구 뽑기 시작'}if($('count'))$('count').textContent=`${n} / 6 수집`;if($('stats'))$('stats').textContent=`수집한 친구 ${n}명 · 무료 뽑기 ${data.history.length}회`;if($('history'))$('history').innerHTML=data.history.length?data.history.slice().reverse().map(x=>`<li>${x.date} · ${x.name} 친구를 만났어요</li>`).join(''):'<li>아직 뽑기 기록이 없어요.</li>';if($('characters'))renderCollection();if($('productList'))renderShop()}
 if($('draw'))$('draw').addEventListener('click',()=>{if(data.used)return;selected=people[Math.floor(Math.random()*people.length)];data.used=true;data.owned.push(selected.id);data.history.push({id:selected.id,name:selected.name,date:new Date().toLocaleDateString('ko-KR')});persist();$('resultImage').innerHTML=`<img src="${selected.img}" alt="${selected.name}">`;$('resultName').textContent=selected.name;$('resultDesc').textContent=selected.desc;$('result').hidden=false});
-const hamburger=$('hamb');if(hamburger)hamburger.addEventListener('click',()=>$('nav').classList.toggle('open'));refresh();
+const hamburger=$('hamb');if(hamburger)hamburger.addEventListener('click',()=>$('nav').classList.toggle('open'));
 
 
 function renderCollection(){
@@ -52,5 +52,5 @@ function renderAttendance(){
 }
 if($('attendanceBtn'))$('attendanceBtn').addEventListener('click',()=>{const today=localDateKey();if(data.attendance.includes(today))return;data.attendance.push(today);persist();renderAttendance()});
 
+refresh();
 renderAttendance();
-if($('productList'))renderShop();
