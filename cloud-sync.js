@@ -11,6 +11,7 @@
   window.MOAMOA_CLOUD.client=client;
   let saving=false,saveQueued=false,mergeInProgress=false;
   const storageKey="moamoa_demo_v2";
+  const ownerKey="moamoa_cloud_owner";
   const readLocal=()=>{try{return JSON.parse(localStorage.getItem(storageKey))||{used:false,owned:[],history:[],attendance:[],cart:[]}}catch{return {used:false,owned:[],history:[],attendance:[],cart:[]}}};
   function mergeData(local,remote){
     const a=local||{},b=remote||{};
@@ -38,11 +39,13 @@
     if(accountStatus)accountStatus.textContent="계정 연결됨 · 컬렉션과 기록을 동기화하고 있어요.";
     mergeInProgress=true;
     try{
-      const local=readLocal();
+      const previousOwner=localStorage.getItem(ownerKey);
+      const local=previousOwner&&previousOwner!==user.id?null:readLocal();
       const {data:row,error}=await client.from("user_data").select("payload").eq("user_id",user.id).maybeSingle();
       if(error)throw error;
       const merged=mergeData(local,row&&row.payload);
       localStorage.setItem(storageKey,JSON.stringify(merged));
+      localStorage.setItem(ownerKey,user.id);
       if(typeof refresh==="function")refresh();
       if(typeof renderAttendance==="function")renderAttendance();
       window.MOAMOA_CLOUD.ready=true;
