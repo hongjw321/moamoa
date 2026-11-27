@@ -23,7 +23,11 @@
   }catch(err){showMessage(err.message||"요청을 처리하지 못했어요.",true);}
   finally{submit.disabled=false;}
  });
- $("resendConfirmation").addEventListener("click",async()=>{\n  const api=client(),email=$("email").value.trim();if(!api)return showMessage("Supabase 설정이 필요해요.",true);if(!email)return showMessage("인증 메일을 받을 이메일을 먼저 입력해주세요.",true);\n  try{const {error}=await api.auth.resend({type:"signup",email,options:{emailRedirectTo:"https://hongjw321.github.io/moamoa/auth.html"}});if(error)throw error;showMessage("인증 메일을 다시 보냈어요. 새 메일의 링크를 눌러주세요.");}catch(err){showMessage(err.message||"인증 메일을 다시 보내지 못했어요.",true);}\n });\n $("resetPassword").addEventListener("click",async()=>{
+ $("resendConfirmation").addEventListener("click",async()=>{
+  const api=client(),email=$("email").value.trim();if(!api)return showMessage("Supabase 설정이 필요해요.",true);if(!email)return showMessage("인증 메일을 받을 이메일을 먼저 입력해주세요.",true);
+  try{const {error}=await api.auth.resend({type:"signup",email,options:{emailRedirectTo:"https://hongjw321.github.io/moamoa/auth.html"}});if(error)throw error;showMessage("인증 메일을 다시 보냈어요. 새 메일의 링크를 눌러주세요.");}catch(err){showMessage(err.message||"인증 메일을 다시 보내지 못했어요.",true);}
+ });
+ $("resetPassword").addEventListener("click",async()=>{
   const api=client(),email=$("email").value.trim();if(!api)return showMessage("Supabase 설정이 필요해요.",true);if(!email)return showMessage("비밀번호 재설정 메일을 받을 이메일을 입력해주세요.",true);
   try{const {error}=await api.auth.resetPasswordForEmail(email,{redirectTo:"https://hongjw321.github.io/moamoa/auth.html"});if(error)throw error;showMessage("비밀번호 재설정 메일을 보냈어요.");}catch(err){showMessage(err.message,true);}
  });
