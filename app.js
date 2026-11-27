@@ -35,7 +35,7 @@ function renderShop(){
  if($('cartCount'))$('cartCount').textContent=count;
  if($('cartItems'))$('cartItems').innerHTML=entries.length?entries.map(x=>`<div class="cart-line"><div><b>${x.product.name}</b><small>${money(x.product.price)} × ${x.qty}</small></div><div class="qty-control"><button data-qty="${x.id}" data-delta="-1" aria-label="수량 줄이기">−</button><span>${x.qty}</span><button data-qty="${x.id}" data-delta="1" aria-label="수량 늘리기">+</button></div></div>`).join(''):'<p class="empty-cart">아직 담긴 상품이 없어요.</p>';
  if($('cartTotal'))$('cartTotal').textContent=money(total);
- if($('cartCheckout'))$('cartCheckout').disabled=!entries.length;
+ if($('cartCheckout'))$('cartCheckout').disabled=true;
 }
 if($('productList'))$('productList').addEventListener('click',e=>{const add=e.target.closest('[data-add]');if(add){const id=add.dataset.add,entry=data.cart.find(x=>x.id===id);if(entry)entry.qty++;else data.cart.push({id,qty:1});persist();add.textContent='담았어요!';setTimeout(()=>{if(add.isConnected)add.textContent='장바구니 담기'},900)}});
 if($('cartItems'))$('cartItems').addEventListener('click',e=>{const b=e.target.closest('[data-qty]');if(!b)return;const item=data.cart.find(x=>x.id===b.dataset.qty);if(!item)return;item.qty+=Number(b.dataset.delta);if(item.qty<=0)data.cart=data.cart.filter(x=>x.id!==item.id);persist()});
