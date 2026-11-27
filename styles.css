@@ -150,3 +150,16 @@ button,.hamb{font-family:'Noto Sans KR',sans-serif}
 .profile-message.error{color:#d35f75}
 .profile-privacy{display:block;margin-top:8px;color:#a78393;font-size:10px;line-height:1.7}
 @media(max-width:520px){#profileForm{grid-template-columns:1fr}.profile-panel-head{flex-direction:column}}
+
+/* Legal and launch information pages */
+.footer-links{display:flex;gap:14px;align-items:center}
+.footer-links a{font-size:10px;color:#a85d7b}
+.legal-section{max-width:900px;padding-bottom:55px}
+.legal-section>h1{font:36px Jua;color:#79465d;margin:10px 0 25px}
+.legal-section h2{font:20px Jua;color:#89516a;margin:28px 0 10px}
+.legal-section p,.legal-section li{font-size:13px;line-height:1.9;color:#806779}
+.legal-section ul{padding-left:22px}
+.legal-alert{padding:17px 19px;margin:0 0 25px;border:1px solid #f0d4a7;border-radius:15px;background:#fff8eb;color:#956b35}
+.legal-alert b{font-size:13px}
+.legal-alert p{margin:7px 0 0;color:#956b35;font-size:12px}
+@media(max-width:650px){footer{flex-wrap:wrap;gap:12px}.footer-links{width:100%;order:4}.legal-section>h1{font-size:30px}}
