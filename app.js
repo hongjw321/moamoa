@@ -2,12 +2,12 @@ const people=[
 {id:'tori',name:'토리',animal:'토끼',desc:'호기심이 많고 언제나 새로운 모험을 꿈꿔요.',personality:'호기심 가득한 모험가',story:'모아모아 마을의 새로운 장소를 발견하는 것을 가장 좋아해요. 반짝이는 것을 보면 눈을 떼지 못하고, 친구들을 모험으로 이끌어요.',favorite:'별 모양 쿠키',color:'코튼 핑크',rarity:'전설',img:'assets/tori.svg'},
 {id:'mongi',name:'몽이',animal:'곰',desc:'포근한 마음으로 친구들을 꼭 안아줘요.',personality:'다정하고 포근한 마음',story:'친구가 힘들어 보이면 먼저 다가가 꼭 안아주는 따뜻한 친구예요. 조용한 오후와 포근한 담요를 좋아해요.',favorite:'꿀 우유',color:'밀크 브라운',rarity:'희귀',img:'assets/mongi.svg'},
 {id:'paenggu',name:'팽구',animal:'펭귄',desc:'조금 느리지만 누구보다 성실한 친구예요.',personality:'차분하고 성실한 노력가',story:'무슨 일이든 서두르지 않고 자기만의 속도로 해내요. 작은 약속도 소중하게 지키는 믿음직한 친구랍니다.',favorite:'차가운 레몬 소다',color:'아이스 블루',rarity:'일반',img:'assets/paenggu.svg'},
-{id:'nabi',name:'나비',animal:'고양이',desc:'새침해 보여도 사실은 애교쟁이랍니다.',personality:'새침한 매력의 애교쟁이',story:'처음에는 조금 도도해 보이지만 친해지면 누구보다 살갑게 다가와요. 햇살이 드는 창가에서 낮잠 자는 걸 좋아해요.',favorite:'참치 모양 쿠키',color:'라벤더',rarity:'희귀',img:'assets/tori.svg'},
-{id:'ppiyak',name:'삐약',animal:'병아리',desc:'작은 날개로 매일 장난을 치는 개구쟁이!',personality:'장난꾸러기 분위기 메이커',story:'작은 날개로 여기저기 바쁘게 돌아다니며 친구들에게 웃음을 선물해요. 새로운 놀이를 생각해 내는 데 천재랍니다.',favorite:'폭신한 옥수수빵',color:'버터 옐로',rarity:'일반',img:'assets/paenggu.svg'},
-{id:'mochi',name:'모찌',animal:'수달',desc:'간식을 좋아하고 물놀이를 사랑해요.',personality:'간식과 물놀이를 사랑하는 친구',story:'물가에서 조약돌을 모으고 맛있는 간식을 나누는 걸 좋아해요. 반짝이는 조약돌은 소중한 보물 상자에 보관해요.',favorite:'조개 모양 젤리',color:'민트 크림',rarity:'에픽',img:'assets/mongi.svg'}];
-const KEY='moamoa_demo_v2';let data;try{data=JSON.parse(localStorage.getItem(KEY))||{used:false,owned:[],history:[]}}catch{data={used:false,owned:[],history:[]}};data.attendance=Array.isArray(data.attendance)?data.attendance:[];let selected=null;const $=id=>document.getElementById(id);
+{id:'nabi',name:'나비',animal:'고양이',desc:'새침해 보여도 사실은 애교쟁이랍니다.',personality:'새침한 매력의 애교쟁이',story:'처음에는 조금 도도해 보이지만 친해지면 누구보다 살갑게 다가와요. 햇살이 드는 창가에서 낮잠 자는 걸 좋아해요.',favorite:'참치 모양 쿠키',color:'라벤더',rarity:'희귀',img:'assets/nabi.svg'},
+{id:'ppiyak',name:'삐약',animal:'병아리',desc:'작은 날개로 매일 장난을 치는 개구쟁이!',personality:'장난꾸러기 분위기 메이커',story:'작은 날개로 여기저기 바쁘게 돌아다니며 친구들에게 웃음을 선물해요. 새로운 놀이를 생각해 내는 데 천재랍니다.',favorite:'폭신한 옥수수빵',color:'버터 옐로',rarity:'일반',img:'assets/ppiyak.svg'},
+{id:'mochi',name:'모찌',animal:'수달',desc:'간식을 좋아하고 물놀이를 사랑해요.',personality:'간식과 물놀이를 사랑하는 친구',story:'물가에서 조약돌을 모으고 맛있는 간식을 나누는 걸 좋아해요. 반짝이는 조약돌은 소중한 보물 상자에 보관해요.',favorite:'조개 모양 젤리',color:'민트 크림',rarity:'에픽',img:'assets/mochi.svg'}];
+const KEY='moamoa_demo_v2';let data;try{data=JSON.parse(localStorage.getItem(KEY))||{used:false,owned:[],history:[]}}catch{data={used:false,owned:[],history:[]}};data.attendance=Array.isArray(data.attendance)?data.attendance:[];data.cart=Array.isArray(data.cart)?data.cart:[];let selected=null;const $=id=>document.getElementById(id);
 function persist(){localStorage.setItem(KEY,JSON.stringify(data));refresh()}
-function refresh(){const n=new Set(data.owned).size;if($('ticket')){$('ticket').textContent=data.used?'사용 완료':'1회 남음';$('draw').disabled=data.used;$('draw').textContent=data.used?'무료 체험 완료':'친구 뽑기 시작'}if($('count'))$('count').textContent=`${n} / 6 수집`;if($('stats'))$('stats').textContent=`수집한 친구 ${n}명 · 무료 뽑기 ${data.history.length}회`;if($('history'))$('history').innerHTML=data.history.length?data.history.slice().reverse().map(x=>`<li>${x.date} · ${x.name} 친구를 만났어요</li>`).join(''):'<li>아직 뽑기 기록이 없어요.</li>';if($('characters'))renderCollection()}
+function refresh(){const n=new Set(data.owned).size;if($('ticket')){$('ticket').textContent=data.used?'사용 완료':'1회 남음';$('draw').disabled=data.used;$('draw').textContent=data.used?'무료 체험 완료':'친구 뽑기 시작'}if($('count'))$('count').textContent=`${n} / 6 수집`;if($('stats'))$('stats').textContent=`수집한 친구 ${n}명 · 무료 뽑기 ${data.history.length}회`;if($('history'))$('history').innerHTML=data.history.length?data.history.slice().reverse().map(x=>`<li>${x.date} · ${x.name} 친구를 만났어요</li>`).join(''):'<li>아직 뽑기 기록이 없어요.</li>';if($('characters'))renderCollection();if($('productList'))renderShop()}
 if($('draw'))$('draw').addEventListener('click',()=>{if(data.used)return;selected=people[Math.floor(Math.random()*people.length)];data.used=true;data.owned.push(selected.id);data.history.push({id:selected.id,name:selected.name,date:new Date().toLocaleDateString('ko-KR')});persist();$('resultImage').innerHTML=`<img src="${selected.img}" alt="${selected.name}">`;$('resultName').textContent=selected.name;$('resultDesc').textContent=selected.desc;$('result').hidden=false});
 const hamburger=$('hamb');if(hamburger)hamburger.addEventListener('click',()=>$('nav').classList.toggle('open'));refresh();
 
@@ -19,6 +19,26 @@ function renderCollection(){
 }
 if($('searchCharacter'))$('searchCharacter').addEventListener('input',renderCollection);
 if($('rarityFilter'))$('rarityFilter').addEventListener('change',renderCollection);
+
+
+const products=[
+{id:'case',name:'모아모아 폰케이스',price:24900,img:'assets/goods-case.svg',desc:'매일 함께하는 포근한 캐릭터 케이스',tag:'BEST'},
+{id:'keyring',name:'캐릭터 아크릴 키링',price:12900,img:'assets/goods-keyring.svg',desc:'가방과 파우치에 달아주는 작은 친구',tag:'POPULAR'},
+{id:'grip',name:'말랑 그립톡',price:9900,img:'assets/goods-grip.svg',desc:'손에 착 감기는 귀여운 포인트 아이템',tag:'NEW'},
+{id:'sticker',name:'모아모아 스티커 팩',price:6900,img:'assets/goods-sticker.svg',desc:'다이어리와 소지품을 꾸미는 스티커',tag:'SMALL GIFT'}
+];
+const money=n=>'₩ '+Number(n).toLocaleString('ko-KR');
+function renderShop(){
+ $('productList').innerHTML=products.map(p=>`<article class="goods-card"><img src="${p.img}" alt="${p.name}"><div class="goods-info"><span class="goods-tag">${p.tag}</span><h3>${p.name}</h3><p>${p.desc}</p><b>${money(p.price)}</b><button class="btn pink" data-add="${p.id}">장바구니 담기</button></div></article>`).join('');
+ const entries=data.cart.map(x=>({...x,product:products.find(p=>p.id===x.id)})).filter(x=>x.product);
+ const count=entries.reduce((n,x)=>n+x.qty,0),total=entries.reduce((n,x)=>n+x.qty*x.product.price,0);
+ if($('cartCount'))$('cartCount').textContent=count;
+ if($('cartItems'))$('cartItems').innerHTML=entries.length?entries.map(x=>`<div class="cart-line"><div><b>${x.product.name}</b><small>${money(x.product.price)} × ${x.qty}</small></div><div class="qty-control"><button data-qty="${x.id}" data-delta="-1" aria-label="수량 줄이기">−</button><span>${x.qty}</span><button data-qty="${x.id}" data-delta="1" aria-label="수량 늘리기">+</button></div></div>`).join(''):'<p class="empty-cart">아직 담긴 상품이 없어요.</p>';
+ if($('cartTotal'))$('cartTotal').textContent=money(total);
+ if($('cartCheckout'))$('cartCheckout').disabled=!entries.length;
+}
+if($('productList'))$('productList').addEventListener('click',e=>{const add=e.target.closest('[data-add]');if(add){const id=add.dataset.add,entry=data.cart.find(x=>x.id===id);if(entry)entry.qty++;else data.cart.push({id,qty:1});persist();add.textContent='담았어요!';setTimeout(()=>{if(add.isConnected)add.textContent='장바구니 담기'},900)}});
+if($('cartItems'))$('cartItems').addEventListener('click',e=>{const b=e.target.closest('[data-qty]');if(!b)return;const item=data.cart.find(x=>x.id===b.dataset.qty);if(!item)return;item.qty+=Number(b.dataset.delta);if(item.qty<=0)data.cart=data.cart.filter(x=>x.id!==item.id);persist()});
 
 function localDateKey(date=new Date()){const y=date.getFullYear(),m=String(date.getMonth()+1).padStart(2,'0'),d=String(date.getDate()).padStart(2,'0');return y+'-'+m+'-'+d}
 function attendanceStreak(){const days=new Set(data.attendance);let cursor=new Date();let key=localDateKey(cursor);if(!days.has(key)){cursor.setDate(cursor.getDate()-1);key=localDateKey(cursor);if(!days.has(key))return 0}let count=0;while(days.has(key)){count++;cursor.setDate(cursor.getDate()-1);key=localDateKey(cursor)}return count}
