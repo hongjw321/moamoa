@@ -134,3 +134,19 @@ button,.hamb{font-family:'Noto Sans KR',sans-serif}
 #signupFields input:focus{border-color:#e88eaa;box-shadow:0 0 0 3px #fce5ed}
 .signup-hint{margin:12px 0 0;font-size:10px;line-height:1.7;color:#a78393}
 @media(max-width:520px){.signup-grid{grid-template-columns:1fr}.signup-grid .signup-wide{grid-column:auto}}
+
+/* My page profile management */
+.profile-panel{margin:0 0 18px;padding:20px;background:#fff;border:1px solid var(--line);border-radius:20px;box-shadow:0 8px 22px #bb80951a}
+.profile-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:15px}
+.profile-panel-head h3{font:22px Jua;margin:6px 0}.profile-panel-head p{font-size:11px;color:#98798a;margin:0}
+.profile-logout{border:1px solid #f0d5e0;border-radius:20px;background:#fff;color:#a85d7b;padding:8px 13px;font-size:11px;cursor:pointer}
+#profileForm{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+#profileForm label{display:block;margin:12px 0 6px;font-size:11px;font-weight:800;color:#8b6074}
+#profileForm label small{font-weight:500;color:#b18b9b}
+#profileForm input{width:100%;height:43px;padding:0 12px;border:1px solid #efd5e0;border-radius:11px;background:#fff;color:#795365;font:12px 'Noto Sans KR',sans-serif}
+#profileForm input:disabled{background:#f8f5f7;color:#a78393}
+#profileSave{grid-column:1/-1;margin-top:18px}
+.profile-message{grid-column:1/-1;min-height:18px;margin:10px 0 0;font-size:11px;color:#4d9871}
+.profile-message.error{color:#d35f75}
+.profile-privacy{display:block;margin-top:8px;color:#a78393;font-size:10px;line-height:1.7}
+@media(max-width:520px){#profileForm{grid-template-columns:1fr}.profile-panel-head{flex-direction:column}}
