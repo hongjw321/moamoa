@@ -78,6 +78,9 @@ class AdminUsersService:
             json=payload,timeout=30)
         try: data=r.json()
         except Exception: data={}
+        if r.status_code==401:
+            self.store.clear_admin_session()
+            raise RuntimeError(data.get("error") or "로그인 세션이 만료되었습니다. 다시 로그인해 주세요.")
         if r.status_code>=400:
             raise RuntimeError(data.get("error") or f"관리자 API 오류 HTTP {r.status_code}")
         return data
