@@ -334,7 +334,8 @@ class Manager(QMainWindow):
         self.member_search.returnPressed.connect(self.load_members)
         tools.addWidget(self.member_search,1)
         tools.addWidget(self.button("검색 및 새로고침",self.load_members,True))
-        tools.addWidget(self.button("회원 CSV 내보내기",self.export_members_csv))
+        tools.addWidget(self.button("현재 페이지 CSV",self.export_members_csv))
+        tools.addWidget(self.button("전체 회원 CSV",self.export_all_members_csv))
         tools.addWidget(self.button("회원 정보 수정",self.edit_member))
         tools.addWidget(self.button("회원 삭제",self.delete_member))
         tools.addWidget(self.button("회원 차단",self.ban_member))
@@ -445,6 +446,48 @@ class Manager(QMainWindow):
             self.member_status.setText(f"회원 {len(users)}명 표시 중 · 페이지당 최대 100명. 검색은 현재 페이지에서 적용됩니다.")
             self.log_line(f"회원 목록 {self.member_page}페이지 · {len(users)}명 조회")
         self.run_async(lambda:self.admin_users.list_users_page(self.member_page,100,query),done)
+    def export_all_members_csv(self):
+        if not self.store.admin_session().get("access_token"):
+            QMessageBox.warning(self,"로그인 필요","전체 회원 내보내기는 관리자 로그인이 필요합니다.")
+            return
+        path,_=QFileDialog.getSaveFileName(self,"전체 회원 목록 CSV 저장","MOAMOA_전체회원목록.csv","CSV 파일 (*.csv)")
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        self.member_status.setText("전체 회원 목록을 페이지 단위로 수집하는 중...")
+        def done(users,error):
+            if error:
+                self.member_status.setText("전체 회원 조회 실패: "+error)
+                QMessageBox.warning(self,"내보내기 실패",error)
+                return
+            try:
+                with open(path,"w",newline="",encoding="utf-8-sig") as file:
+                    writer=csv.writer(file)
+                    writer.writerow(["이메일","이름","닉네임","휴대폰","주소","이메일 인증","계정 상태","가입일","최근 로그인","회원 ID"])
+                    for u in users:
+                        meta=u.get("user_metadata") or {}
+                        until=u.get("banned_until") or ""
+                        status="정상"
+                        try:
+                            expiry=datetime.fromisoformat(until.replace("Z","+00:00"))
+                            if expiry.tzinfo is None: expiry=expiry.replace(tzinfo=timezone.utc)
+                            if expiry>datetime.now(timezone.utc): status="차단 중"
+                        except Exception:
+                            pass
+                        writer.writerow([
+                            u.get("email",""),meta.get("full_name",""),meta.get("nickname",""),
+                            meta.get("phone",""),meta.get("address",""),
+                            "인증 완료" if (u.get("email_confirmed_at") or u.get("confirmed_at")) else "미인증",
+                            status,u.get("created_at",""),u.get("last_sign_in_at",""),u.get("id","")
+                        ])
+                self.member_status.setText(f"전체 회원 CSV 저장 완료 · {len(users):,}명")
+                self.log_line(f"전체 회원 CSV 내보내기 완료 · {len(users):,}명")
+                QMessageBox.information(self,"내보내기 완료",f"전체 회원 {len(users):,}명의 정보를 저장했습니다.\\n{path}")
+            except Exception as exc:
+                QMessageBox.warning(self,"내보내기 실패",str(exc))
+        self.run_async(self.admin_users.list_all_users,done)
+
     def export_members_csv(self):
         if self.members_table.rowCount()==0:
             QMessageBox.information(self,"내보낼 회원 없음","먼저 회원 목록을 조회해 주세요.")
