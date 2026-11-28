@@ -81,13 +81,15 @@ class AdminUsersService:
         if r.status_code>=400:
             raise RuntimeError(data.get("error") or f"관리자 API 오류 HTTP {r.status_code}")
         return data
-    def list_users(self,search=""):
-        data=self.request({"action":"list","page":1,"perPage":100})
+    def list_users_page(self,page=1,per_page=100,search=""):
+        data=self.request({"action":"list","page":int(page),"perPage":int(per_page)})
         users=data.get("users",[])
         q=search.strip().lower()
         if q:
-            users=[u for u in users if q in (u.get("email","")+" "+u.get("user_metadata",{}).get("full_name","")+" "+u.get("user_metadata",{}).get("nickname","")).lower()]
-        return users
+            users=[u for u in users if q in (u.get("email","")+" "+u.get("user_metadata",{}).get("full_name","")+" "+u.get("user_metadata",{}).get("nickname","")+" "+u.get("user_metadata",{}).get("phone","")).lower()]
+        return {"users":users,"page":data.get("page",page),"per_page":data.get("perPage",per_page),"total":data.get("total")}
+    def list_users(self,search=""):
+        return self.list_users_page(1,100,search).get("users",[])
     def update_profile(self,user_id,profile):
         return self.request({"action":"update_profile","user_id":user_id,"profile":profile})
     def delete_user(self,user_id):
