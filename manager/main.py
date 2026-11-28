@@ -124,9 +124,10 @@ class Manager(QMainWindow):
         analytics_tools=QHBoxLayout()
         self.analytics_days=7
         analytics_tools.addWidget(QLabel("조회 기간"))
-        for days,label in ((7,"최근 7일"),(30,"최근 30일"),(90,"최근 90일")):
+        for days,label in ((7,"최근 7일"),(30,"최근 30일"),(90,"최근 90일"),(365,"최근 1년")):
             analytics_tools.addWidget(self.button(label,lambda checked=False,d=days:self.set_analytics_period(d),days==7))
         analytics_tools.addStretch()
+        analytics_tools.addWidget(self.button("CSV 내보내기",self.export_activity_analytics_csv))
         analytics_tools.addWidget(self.button("분석 새로고침",self.refresh_activity_analytics))
         l.addLayout(analytics_tools)
         analytics_cards=QGridLayout(); analytics_cards.setSpacing(8)
@@ -229,6 +230,28 @@ class Manager(QMainWindow):
                 self.analytics_table.setItem(index,col,QTableWidgetItem(str(value)))
         self.analytics_table.scrollToBottom()
         self.log_line(f"기간별 운영 분석 갱신 완료 · 최근 {days}일 · 활동 {total}건")
+
+    def export_activity_analytics_csv(self):
+        if self.analytics_table.rowCount()==0:
+            QMessageBox.information(self,"내보내기","먼저 운영 분석을 새로고침해 주세요.")
+            return
+        path,_=QFileDialog.getSaveFileName(self,"운영 분석 CSV 저장",
+            f"MOAMOA_운영분석_{self.analytics_days}일.csv","CSV 파일 (*.csv)")
+        if not path:
+            return
+        try:
+            with open(path,"w",newline="",encoding="utf-8-sig") as file:
+                writer=csv.writer(file)
+                writer.writerow(["날짜","회원가입","로그인","기타 활동"])
+                for row in range(self.analytics_table.rowCount()):
+                    writer.writerow([
+                        self.analytics_table.item(row,col).text() if self.analytics_table.item(row,col) else ""
+                        for col in range(self.analytics_table.columnCount())
+                    ])
+            QMessageBox.information(self,"내보내기 완료",f"운영 분석 데이터를 저장했습니다.\\n{path}")
+            self.log_line(f"운영 분석 CSV 내보내기 완료 · 최근 {self.analytics_days}일")
+        except Exception as exc:
+            QMessageBox.critical(self,"내보내기 실패",str(exc))
 
     def refresh_dashboard_stats(self):
         session=self.store.admin_session()
