@@ -340,6 +340,14 @@ class Manager(QMainWindow):
         tools.addWidget(self.button("회원 차단",self.ban_member))
         tools.addWidget(self.button("차단 해제",self.unban_member))
         l.addLayout(tools)
+        page_tools=QHBoxLayout()
+        self.member_page=1
+        self.member_page_status=QLabel("페이지 정보 대기 중")
+        page_tools.addWidget(self.member_page_status)
+        page_tools.addStretch()
+        page_tools.addWidget(self.button("이전 페이지",self.previous_member_page))
+        page_tools.addWidget(self.button("다음 페이지",self.next_member_page))
+        l.addLayout(page_tools)
         self.members_table=QTableWidget(0,8)
         self.members_table.setHorizontalHeaderLabels(["이메일","이름","닉네임","휴대폰","이메일 인증","계정 상태","가입일","최근 로그인"])
         self.members_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -383,15 +391,30 @@ class Manager(QMainWindow):
         self.admin_role_status.setText("권한: 로그인 필요")
         self.global_role_status.setText("권한: 로그인 필요")
         self.log_line("관리자 로그아웃")
+    def previous_member_page(self):
+        if self.member_page>1:
+            self.member_page-=1
+            self.load_members()
+
+    def next_member_page(self):
+        total=getattr(self,"_member_total",None)
+        per_page=100
+        if total is not None and self.member_page*per_page>=total:
+            return
+        self.member_page+=1
+        self.load_members()
+
     def load_members(self):
         session=self.store.admin_session()
         if not session.get("access_token"):
             self.member_status.setText("먼저 관리자 로그인을 해주세요."); return
         query=self.member_search.text()
-        self.member_status.setText("회원 목록을 불러오는 중...")
-        def done(users,error):
+        self.member_status.setText(f"{self.member_page}페이지 회원 목록을 불러오는 중...")
+        def done(result,error):
             if error:
                 self.member_status.setText("조회 실패: "+error); return
+            users=result.get("users",[])
+            self._member_total=result.get("total")
             self.members_table.setRowCount(len(users))
             self._member_map={u.get('id'):u for u in users}
             for i,u in enumerate(users):
@@ -411,9 +434,11 @@ class Manager(QMainWindow):
                     item=QTableWidgetItem(str(v))
                     if j==0: item.setData(Qt.UserRole,u.get("id"))
                     self.members_table.setItem(i,j,item)
-            self.member_status.setText(f"회원 {len(users)}명 표시 중 (최대 100명 조회). 인증 여부와 현재 차단 상태를 확인할 수 있습니다.")
-            self.log_line(f"회원 목록 {len(users)}명 조회")
-        self.run_async(lambda:self.admin_users.list_users(query),done)
+            total_text=f"{self._member_total:,}명" if self._member_total is not None else "전체 인원 확인 불가"
+            self.member_page_status.setText(f"{self.member_page}페이지 · {len(users)}명 표시 · 전체 {total_text}")
+            self.member_status.setText(f"회원 {len(users)}명 표시 중 · 페이지당 최대 100명. 검색은 현재 페이지에서 적용됩니다.")
+            self.log_line(f"회원 목록 {self.member_page}페이지 · {len(users)}명 조회")
+        self.run_async(lambda:self.admin_users.list_users_page(self.member_page,100,query),done)
     def export_members_csv(self):
         if self.members_table.rowCount()==0:
             QMessageBox.information(self,"내보낼 회원 없음","먼저 회원 목록을 조회해 주세요.")
