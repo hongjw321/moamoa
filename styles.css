@@ -169,3 +169,13 @@ button,.hamb{font-family:'Noto Sans KR',sans-serif}
 .signup-consent span{color:#8b6074}
 .signup-consent a{font-weight:800;text-decoration:underline!important}
 .signup-consent b{color:#d35f75}
+
+.account-danger{margin:18px 0;padding:20px;border:1px solid #f0cbd2;border-radius:18px;background:#fff9fa}
+.account-danger h3{font:20px Jua;color:#b34e68;margin:0 0 8px}
+.account-danger p{font-size:12px;line-height:1.7;color:#956c7a}
+.account-danger label{display:block;font-size:11px;color:#895b6c;margin:12px 0 7px}
+.delete-row{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:center}
+.delete-row input[type=checkbox]{width:18px;height:18px;accent-color:#d65f7c}
+.delete-row input[type=text]{min-width:0;height:40px;border:1px solid #edcbd5;border-radius:10px;padding:0 10px;background:white;color:#795365}
+.btn.danger{background:#b84e68;color:white;border:0}
+.account-danger>small{display:block;font-size:10px;line-height:1.6;color:#a78393;margin-top:8px}
