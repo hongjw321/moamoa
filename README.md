@@ -51,4 +51,8 @@ GitHub Pages 기반의 캐릭터 수집 서비스 MVP입니다.
 - [ ] 서버 측 뽑기·일일 제한·로그 검증 구현(뽑기 보상/유료화 전)
 - [ ] 실제 판매 시 결제 PG, 주문·재고·배송·환불, 전자상거래 고지 구축
 - [ ] 모바일/PC 브라우저별 QA 및 백업·장애 대응 계획 수립
-
+## Windows 관리자 프로그램
+- 프로그램 소스: [`manager/`](manager/)
+- Windows EXE 자동 빌드: [GitHub Actions](https://github.com/hongjw321/moamoa/actions/workflows/build-manager-windows.yml)
+- 빌드 완료 후 Actions 실행 상세 화면의 Artifacts에서 `MOAMOA-Manager-Windows.zip`을 내려받을 수 있습니다.
+- 현재 1차 버전은 Supabase 연결 확인, GitHub 저장소/Actions 조회, 관리 콘솔 바로가기를 지원합니다. 회원 직접 관리, DB 수정, 자동 배포는 안전한 서버 권한 API 구현 후 추가됩니다.
