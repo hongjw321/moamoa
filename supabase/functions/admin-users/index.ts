@@ -106,6 +106,18 @@ Deno.serve(async (req) => {
       return reply({ logs: data || [] });
     }
 
+    if (action === "report_error") {
+      const message = String(body.message || "").trim();
+      const source = String(body.source || "manager").slice(0, 120);
+      if (!message) return reply({ error: "오류 내용이 필요합니다." }, 400);
+      const { error } = await admin.from("admin_error_logs").insert({
+        source, message: message.slice(0, 1500),
+        details: { actor_email: actorEmail, ...(body.details && typeof body.details === "object" ? body.details : {}) },
+      });
+      if (error) throw error;
+      return reply({ logged: true });
+    }
+
     if (action === "list_error_logs") {
       const { data, error } = await admin.from("admin_error_logs")
         .select("id,source,message,details,created_at")
