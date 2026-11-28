@@ -90,6 +90,10 @@ class AdminUsersService:
         return self.request({"action":"update_profile","user_id":user_id,"profile":profile})
     def delete_user(self,user_id):
         return self.request({"action":"delete_user","user_id":user_id,"confirmation":"DELETE_MEMBER"})
+    def ban_user(self,user_id,duration):
+        return self.request({"action":"ban_user","user_id":user_id,"duration":duration})
+    def unban_user(self,user_id):
+        return self.request({"action":"unban_user","user_id":user_id})
 
 class GitHubService:
     def __init__(self,store): self.store=store
