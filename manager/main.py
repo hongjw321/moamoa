@@ -2,6 +2,7 @@ import sys
 import json
 import csv
 import hashlib
+import hmac
 from datetime import datetime, timezone, timedelta
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
@@ -885,7 +886,7 @@ class Manager(QMainWindow):
             if expected_digest:
                 canonical=json.dumps(records,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
                 actual_digest=hashlib.sha256(canonical).hexdigest()
-                if not isinstance(expected_digest,str) or not hashlib.compare_digest(expected_digest,actual_digest):
+                if not isinstance(expected_digest,str) or not hmac.compare_digest(expected_digest,actual_digest):
                     raise ValueError("백업 파일 무결성 검사에 실패했습니다. 파일이 손상되었거나 내용이 변경되었을 수 있어 복구를 중단합니다.")
             else:
                 legacy_backup=True
