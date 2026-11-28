@@ -19,7 +19,7 @@ jobs:
           pip install -r manager/requirements.txt
       - name: Build Windows executable
         working-directory: manager
-        run: pyinstaller --noconfirm --clean --windowed --name "MOAMOA-Manager" --collect-all keyring main.py
+        run: pyinstaller --noconfirm --clean --windowed --name "MOAMOA-Manager" --collect-all keyring --hidden-import=services --paths . main.py
       - name: Package executable
         shell: pwsh
         run: Compress-Archive -Path manager/dist/MOAMOA-Manager -DestinationPath MOAMOA-Manager-Windows.zip -Force
