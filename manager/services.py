@@ -93,6 +93,20 @@ class AdminUsersService:
         return {"users":users,"page":data.get("page",page),"per_page":data.get("perPage",per_page),"total":data.get("total")}
     def list_users(self,search=""):
         return self.list_users_page(1,100,search).get("users",[])
+    def list_all_users(self):
+        all_users=[]
+        page=1
+        while page<=10000:
+            result=self.list_users_page(page,100,"")
+            users=result.get("users",[])
+            all_users.extend(users)
+            total=result.get("total")
+            if total is not None and page*100>=int(total):
+                break
+            if len(users)<100:
+                break
+            page+=1
+        return all_users
     def update_profile(self,user_id,profile):
         return self.request({"action":"update_profile","user_id":user_id,"profile":profile})
     def delete_user(self,user_id):
