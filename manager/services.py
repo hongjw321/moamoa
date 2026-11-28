@@ -64,6 +64,8 @@ class SupabaseService:
 class AdminUsersService:
     def __init__(self,cfg,store):
         self.cfg=cfg; self.store=store
+    def get_admin_info(self):
+        return self.request({"action":"get_admin_info"})
     def request(self,payload):
         url=self.cfg.get("supabase_url","").rstrip("/")
         key=self.cfg.get("supabase_anon_key","")
