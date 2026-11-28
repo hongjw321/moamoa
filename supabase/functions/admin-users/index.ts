@@ -83,6 +83,27 @@ Deno.serve(async (req) => {
       return reply({ updated: true, user_id: data.user.id });
     }
 
+    if (action === "ban_user") {
+      const userId = String(body.user_id || "");
+      const duration = String(body.duration || "");
+      const allowedDurations = ["24h", "168h", "720h", "876000h"];
+      if (!userId) return reply({ error: "회원 ID가 필요합니다." }, 400);
+      if (userId === user.id) return reply({ error: "현재 로그인한 관리자 계정은 차단할 수 없습니다." }, 400);
+      if (!allowedDurations.includes(duration)) return reply({ error: "허용되지 않은 차단 기간입니다." }, 400);
+      const { data, error } = await admin.auth.admin.updateUserById(userId, { ban_duration: duration });
+      if (error) throw error;
+      return reply({ banned: true, user_id: data.user.id, banned_until: data.user.banned_until || "" });
+    }
+
+    if (action === "unban_user") {
+      const userId = String(body.user_id || "");
+      if (!userId) return reply({ error: "회원 ID가 필요합니다." }, 400);
+      if (userId === user.id) return reply({ error: "현재 로그인한 관리자 계정은 차단 해제 대상이 아닙니다." }, 400);
+      const { data, error } = await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
+      if (error) throw error;
+      return reply({ unbanned: true, user_id: data.user.id });
+    }
+
     if (action === "delete_user") {
       const userId = String(body.user_id || "");
       if (!userId) return reply({ error: "회원 ID가 필요합니다." }, 400);
