@@ -94,6 +94,11 @@ class AdminUsersService:
         return self.request({"action":"ban_user","user_id":user_id,"duration":duration})
     def unban_user(self,user_id):
         return self.request({"action":"unban_user","user_id":user_id})
+    def list_data(self):
+        data=self.request({"action":"list_data"})
+        return data.get("records",[])
+    def restore_data(self,records):
+        return self.request({"action":"restore_data","records":records})
 
 class GitHubService:
     def __init__(self,store): self.store=store
