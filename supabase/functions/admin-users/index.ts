@@ -311,13 +311,20 @@ Deno.serve(async (req) => {
       const uniqueIds = [...new Set(userIds)];
       const succeeded: string[] = [];
       const failed: { user_id: string; error: string }[] = [];
-      for (const userId of uniqueIds) {
-        const { data, error } = await admin.auth.admin.updateUserById(userId,
-          { ban_duration: operation === "ban" ? duration : "none" });
-        if (error || !data.user) {
-          failed.push({ user_id: userId, error: error?.message || "회원을 찾을 수 없습니다." });
-        } else {
-          succeeded.push(userId);
+      // Process in small concurrent batches to keep the request within the client timeout.
+      for (let index = 0; index < uniqueIds.length; index += 10) {
+        const chunk = uniqueIds.slice(index, index + 10);
+        const results = await Promise.all(chunk.map(async (userId) => {
+          const { data, error } = await admin.auth.admin.updateUserById(userId,
+            { ban_duration: operation === "ban" ? duration : "none" });
+          return { userId, data, error };
+        }));
+        for (const result of results) {
+          if (result.error || !result.data.user) {
+            failed.push({ user_id: result.userId, error: result.error?.message || "회원을 찾을 수 없습니다." });
+          } else {
+            succeeded.push(result.userId);
+          }
         }
       }
       await audit(operation === "ban" ? "회원 일괄 차단" : "회원 일괄 차단 해제",
