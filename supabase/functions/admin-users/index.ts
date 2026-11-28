@@ -104,6 +104,36 @@ Deno.serve(async (req) => {
       return reply({ unbanned: true, user_id: data.user.id });
     }
 
+    if (action === "list_data") {
+      const { data, error } = await admin.from("user_data")
+        .select("user_id,payload,updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return reply({ records: data || [] });
+    }
+
+    if (action === "restore_data") {
+      const records = body.records;
+      if (!Array.isArray(records) || records.length < 1 || records.length > 500) {
+        return reply({ error: "복구 데이터는 1~500건이어야 합니다." }, 400);
+      }
+      if (JSON.stringify(records).length > 5_000_000) {
+        return reply({ error: "백업 파일 크기가 너무 큽니다. 5MB 이하로 나눠 복구해 주세요." }, 413);
+      }
+      const rows: { user_id: string; payload: Record<string, unknown>; updated_at?: string }[] = [];
+      for (const item of records) {
+        if (!item || typeof item.user_id !== "string" || !item.user_id ||
+            typeof item.payload !== "object" || item.payload === null || Array.isArray(item.payload)) {
+          return reply({ error: "백업 데이터의 회원 ID 또는 payload 형식이 올바르지 않습니다." }, 400);
+        }
+        rows.push({ user_id: item.user_id, payload: item.payload });
+      }
+      const { error } = await admin.from("user_data").upsert(rows, { onConflict: "user_id" });
+      if (error) throw error;
+      return reply({ restored: rows.length });
+    }
+
     if (action === "delete_user") {
       const userId = String(body.user_id || "");
       if (!userId) return reply({ error: "회원 ID가 필요합니다." }, 400);
