@@ -56,7 +56,7 @@ class Manager(QMainWindow):
         sl.addSpacing(22)
         self.stack=QStackedWidget()
         self.pages=[]
-        for label, page in [("대시보드",self.dashboard_page()),("회원 관리",self.members_page()),("데이터 관리",self.data_page()),("운영 관리",self.operations_page()),("GitHub 배포",self.github_page()),("환경 설정",self.settings_page())]:
+        for label, page in [("대시보드",self.dashboard_page()),("회원 관리",self.members_page()),("데이터 관리",self.data_page()),("운영 관리",self.operations_page()),("관리자 계정",self.admin_accounts_page()),("GitHub 배포",self.github_page()),("환경 설정",self.settings_page())]:
             b=QPushButton(label); b.setObjectName("nav"); b.setCheckable(True)
             b.clicked.connect(lambda checked=False, i=len(self.pages): self.go(i))
             sl.addWidget(b); self.pages.append((b,page)); self.stack.addWidget(page)
@@ -76,7 +76,7 @@ class Manager(QMainWindow):
     def button(self, text, fn, primary=False):
         b=QPushButton(text); b.setObjectName("primary" if primary else "action"); b.clicked.connect(fn); return b
     def go(self, i):
-        self.stack.setCurrentIndex(i); self.header.setText(["대시보드","회원 관리","데이터 관리","운영 관리","GitHub 배포","환경 설정"][i])
+        self.stack.setCurrentIndex(i); self.header.setText(["대시보드","회원 관리","데이터 관리","운영 관리","관리자 계정","GitHub 배포","환경 설정"][i])
         for n,(b,_) in enumerate(self.pages): b.setChecked(n==i)
     def run_async(self, fn, callback):
         w=Worker(fn); self.workers.append(w)
@@ -630,6 +630,83 @@ class Manager(QMainWindow):
                 for j,value in enumerate(vals): self.error_table.setItem(i,j,QTableWidgetItem(str(value)))
             self.error_status.setText(f"오류 로그 {len(rows)}건 표시 (최근 200건)")
         self.run_async(self.admin_users.list_error_logs,done)
+    def admin_accounts_page(self):
+        w=QWidget(); l=QVBoxLayout(w)
+        l.addWidget(self.title_block("관리자 계정 관리","최고 관리자 전용 · 관리자 등록과 일반 관리자 접근 활성화/비활성화를 관리합니다."))
+        note=QLabel("등록할 이메일은 먼저 MOAMOA 홈페이지에 회원가입되어 있어야 합니다. 최고 관리자 권한은 Supabase 보안 설정에서만 지정할 수 있습니다.")
+        note.setObjectName("muted"); note.setWordWrap(True); l.addWidget(note)
+        addrow=QHBoxLayout()
+        self.new_admin_email=QLineEdit(); self.new_admin_email.setPlaceholderText("추가할 관리자 이메일")
+        addrow.addWidget(self.new_admin_email,1)
+        addrow.addWidget(self.button("일반 관리자 등록",self.add_admin_account,True))
+        addrow.addWidget(self.button("목록 새로고침",self.load_admin_accounts))
+        l.addLayout(addrow)
+        self.admin_accounts_table=QTableWidget(0,4)
+        self.admin_accounts_table.setHorizontalHeaderLabels(["이메일","권한","상태","등록일"])
+        self.admin_accounts_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.admin_accounts_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.admin_accounts_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.admin_accounts_table.setAlternatingRowColors(True)
+        l.addWidget(self.admin_accounts_table,1)
+        actions=QHBoxLayout()
+        actions.addWidget(self.button("선택 관리자 비활성화",lambda:self.change_admin_active(False)))
+        actions.addWidget(self.button("선택 관리자 다시 활성화",lambda:self.change_admin_active(True)))
+        actions.addStretch(); l.addLayout(actions)
+        self.admin_accounts_status=QLabel("최고 관리자 로그인 후 목록을 불러올 수 있습니다.")
+        self.admin_accounts_status.setObjectName("muted"); l.addWidget(self.admin_accounts_status)
+        return w
+
+    def load_admin_accounts(self):
+        if not self.store.admin_session().get("access_token"):
+            self.admin_accounts_status.setText("먼저 최고 관리자 계정으로 로그인해 주세요."); return
+        self.admin_accounts_status.setText("관리자 목록을 불러오는 중...")
+        def done(rows,error):
+            if error:
+                self.admin_accounts_status.setText("조회 실패: "+error); return
+            self.admin_accounts_table.setRowCount(len(rows))
+            self._admin_account_rows={}
+            for i,row in enumerate(rows):
+                email=row.get("email","")
+                self._admin_account_rows[i]=row
+                vals=[email,"최고 관리자" if row.get("role")=="super_admin" else "일반 관리자",
+                      "활성" if row.get("is_active") else "비활성",
+                      (row.get("created_at") or "-")[:10]]
+                for j,value in enumerate(vals):
+                    item=QTableWidgetItem(str(value)); self.admin_accounts_table.setItem(i,j,item)
+            self.admin_accounts_status.setText(f"관리자 {len(rows)}개 계정 · 최고 관리자 계정은 여기서 비활성화할 수 없습니다.")
+        self.run_async(self.admin_users.list_admin_accounts,done)
+
+    def add_admin_account(self):
+        email=self.new_admin_email.text().strip().lower()
+        if not email:
+            QMessageBox.warning(self,"입력 확인","등록할 이메일을 입력해 주세요."); return
+        if QMessageBox.question(self,"관리자 등록",f"{email} 계정을 일반 관리자로 등록할까요?")!=QMessageBox.Yes:
+            return
+        def done(result,error):
+            if error:
+                QMessageBox.warning(self,"등록 실패",error); return
+            self.new_admin_email.clear(); self.admin_accounts_status.setText("일반 관리자 등록 완료")
+            self.load_admin_accounts()
+        self.run_async(lambda:self.admin_users.add_admin_account(email),done)
+
+    def change_admin_active(self,active):
+        row=self.admin_accounts_table.currentRow()
+        if row<0 or row not in getattr(self,"_admin_account_rows",{}):
+            QMessageBox.information(self,"계정 선택","상태를 변경할 관리자 계정을 선택해 주세요."); return
+        account=self._admin_account_rows[row]
+        if account.get("role")=="super_admin":
+            QMessageBox.warning(self,"변경 불가","최고 관리자 계정은 여기서 변경할 수 없습니다."); return
+        email=account.get("email","")
+        action="활성화" if active else "비활성화"
+        if QMessageBox.question(self,"관리자 계정 변경",f"{email} 계정을 {action}할까요?")!=QMessageBox.Yes:
+            return
+        def done(result,error):
+            if error:
+                QMessageBox.warning(self,"변경 실패",error); return
+            self.admin_accounts_status.setText(f"{email} 계정 {action} 완료")
+            self.load_admin_accounts()
+        self.run_async(lambda:self.admin_users.set_admin_active(email,active),done)
+
     def github_page(self):
         w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("GitHub 배포","저장소 정보와 GitHub Actions 배포 기록을 확인합니다."))
         self.repo_label=QLabel("저장소: hongjw321/moamoa"); self.run_table=QTableWidget(0,4); self.run_table.setHorizontalHeaderLabels(["워크플로","상태","결과","실행 시각"])
