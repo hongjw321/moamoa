@@ -112,6 +112,12 @@ class AdminUsersService:
         return self.request({"action":"list_activity_logs"}).get("logs",[])
     def list_error_logs(self):
         return self.request({"action":"list_error_logs"}).get("logs",[])
+    def list_admin_accounts(self):
+        return self.request({"action":"list_admin_accounts"}).get("admins",[])
+    def add_admin_account(self,email):
+        return self.request({"action":"add_admin_account","email":email})
+    def set_admin_active(self,email,is_active):
+        return self.request({"action":"set_admin_active","email":email,"is_active":is_active})
     def report_error(self,source,message):
         return self.request({"action":"report_error","source":source,"message":message})
 
