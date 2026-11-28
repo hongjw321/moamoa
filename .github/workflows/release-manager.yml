@@ -1,0 +1,33 @@
+name: Publish MOAMOA Manager Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (example: 1.1.0; do not include v)"
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r manager/requirements.txt
+      - name: Build Windows executable
+        working-directory: manager
+        run: pyinstaller --noconfirm --clean --windowed --name "MOAMOA-Manager" --collect-all keyring --hidden-import=services --paths . main.py
+      - name: Package executable
+        shell: pwsh
+        run: Compress-Archive -Path manager/dist/MOAMOA-Manager -DestinationPath MOAMOA-Manager-Windows.zip -Force
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" MOAMOA-Manager-Windows.zip --title "MOAMOA Manager v${{ inputs.version }}" --notes "MOAMOA Manager Windows build. Download the ZIP, extract it, and run MOAMOA-Manager.exe."
