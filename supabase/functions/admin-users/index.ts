@@ -44,17 +44,41 @@ Deno.serve(async (req) => {
     });
     const { data: { user }, error: userError } = await userClient.auth.getUser(token);
     if (userError || !user?.email) return reply({ error: "로그인이 만료되었습니다." }, 401);
-    const normalizedEmail = user.email.toLowerCase();
-    if (!allowlist.includes(normalizedEmail)) return reply({ error: "관리자 권한이 없습니다." }, 403);
-    // Backward compatibility: existing allowlisted admins retain full access until the super-admin list is configured.
-    const isSuperAdmin = configuredSuperAdmins.length === 0 || configuredSuperAdmins.includes(normalizedEmail);
-    const adminRole = isSuperAdmin ? "super_admin" : "admin";
+    const normalizedEmail = user.email.trim().toLowerCase();
     actorEmail = user.email;
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     adminClient = admin;
+
+    // Seed existing allowlist accounts once without overwriting accounts managed in the UI.
+    const seedRows = allowlist.map((email) => ({
+      email,
+      role: configuredSuperAdmins.includes(email) || configuredSuperAdmins.length === 0 ? "super_admin" : "admin",
+      is_active: true,
+    }));
+    if (seedRows.length) {
+      const { error: seedError } = await admin.from("admin_accounts").upsert(seedRows, {
+        onConflict: "email", ignoreDuplicates: true,
+      });
+      if (seedError) throw seedError;
+    }
+    if (configuredSuperAdmins.includes(normalizedEmail)) {
+      const { error: promoteError } = await admin.from("admin_accounts").upsert({
+        email: normalizedEmail, role: "super_admin", is_active: true,
+      }, { onConflict: "email" });
+      if (promoteError) throw promoteError;
+    }
+    const { data: adminAccount, error: accountError } = await admin.from("admin_accounts")
+      .select("email,role,is_active").eq("email", normalizedEmail).maybeSingle();
+    if (accountError) throw accountError;
+    if (!adminAccount || adminAccount.is_active !== true) {
+      return reply({ error: "관리자 권한이 없거나 비활성화된 계정입니다." }, 403);
+    }
+    const isSuperAdmin = adminAccount.role === "super_admin" &&
+      configuredSuperAdmins.includes(normalizedEmail);
+    const adminRole = isSuperAdmin ? "super_admin" : "admin";
     const body = await req.json();
     const action = String(body.action || "");
     currentAction = action;
@@ -71,17 +95,61 @@ Deno.serve(async (req) => {
         email: actorEmail,
         role: adminRole,
         capabilities: isSuperAdmin
-          ? ["members_read", "members_edit", "members_ban", "members_delete", "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read"]
+          ? ["members_read", "members_edit", "members_ban", "members_delete", "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read", "admins_manage"]
           : ["members_read", "announcements_manage", "activity_logs_read"],
       });
     }
 
     const superAdminOnlyActions = new Set([
+      "list_admin_accounts", "add_admin_account", "set_admin_active",
       "update_profile", "ban_user", "unban_user", "list_data",
       "restore_data", "delete_user", "list_error_logs",
     ]);
     if (!isSuperAdmin && superAdminOnlyActions.has(action)) {
       return reply({ error: "이 작업은 최고 관리자 권한이 필요합니다." }, 403);
+    }
+
+    if (action === "list_admin_accounts") {
+      const { data, error } = await admin.from("admin_accounts")
+        .select("email,role,is_active,created_at,updated_at")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return reply({ admins: data || [] });
+    }
+
+    if (action === "add_admin_account") {
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+        return reply({ error: "올바른 이메일 주소를 입력해 주세요." }, 400);
+      }
+      if (configuredSuperAdmins.includes(email)) {
+        return reply({ error: "최고 관리자는 환경 보안 설정에서만 지정할 수 있습니다." }, 400);
+      }
+      const { error } = await admin.from("admin_accounts").upsert({
+        email, role: "admin", is_active: true, updated_at: new Date().toISOString(),
+      }, { onConflict: "email" });
+      if (error) throw error;
+      await audit("관리자 계정 등록", null, { target_email: email, role: "admin" });
+      return reply({ saved: true, email });
+    }
+
+    if (action === "set_admin_active") {
+      const email = String(body.email || "").trim().toLowerCase();
+      const active = body.is_active === true;
+      if (!email) return reply({ error: "관리자 이메일이 필요합니다." }, 400);
+      if (configuredSuperAdmins.includes(email)) {
+        return reply({ error: "최고 관리자 계정은 여기서 비활성화할 수 없습니다." }, 400);
+      }
+      if (email === normalizedEmail && !active) {
+        return reply({ error: "현재 로그인한 관리자 계정은 비활성화할 수 없습니다." }, 400);
+      }
+      const { data, error } = await admin.from("admin_accounts")
+        .update({ is_active: active, updated_at: new Date().toISOString() })
+        .eq("email", email).eq("role", "admin").select("email").maybeSingle();
+      if (error) throw error;
+      if (!data) return reply({ error: "일반 관리자 계정을 찾을 수 없습니다." }, 404);
+      await audit(active ? "관리자 계정 활성화" : "관리자 계정 비활성화", null, { target_email: email });
+      return reply({ saved: true, email, is_active: active });
     }
 
     if (action === "list_announcements") {
