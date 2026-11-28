@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
 
     const superAdminOnlyActions = new Set([
       "list_admin_accounts", "list_admin_activity_logs", "add_admin_account", "set_admin_active",
-      "update_profile", "ban_user", "unban_user", "list_data",
+      "update_profile", "ban_user", "unban_user", "batch_member_action", "list_data",
       "restore_data", "delete_user", "list_error_logs",
     ]);
     if (!isSuperAdmin && superAdminOnlyActions.has(action)) {
@@ -248,6 +248,81 @@ Deno.serve(async (req) => {
       }));
       await audit("회원 목록 조회", null, { count: users.length });
       return reply({ users, page, perPage, total: data.total ?? null });
+    }
+
+    if (action === "search") {
+      const query = String(body.query || "").trim().toLowerCase();
+      if (!query || query.length > 120) return reply({ error: "검색어는 1~120자로 입력해 주세요." }, 400);
+      const requestedPage = Math.max(1, Math.min(1000, Number(body.page) || 1));
+      const perPage = Math.max(1, Math.min(100, Number(body.perPage) || 100));
+      const matches: any[] = [];
+      let page = 1;
+      let searchLimited = false;
+      while (page <= 1000) {
+        const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
+        if (error) throw error;
+        const batch = data.users || [];
+        for (const u of batch) {
+          const metadata = u.user_metadata || {};
+          const haystack = [
+            u.email || "", metadata.full_name || "", metadata.nickname || "",
+            metadata.phone || "", metadata.address || "", u.id || "",
+          ].join(" ").toLowerCase();
+          if (haystack.includes(query)) {
+            matches.push({
+              id: u.id, email: u.email || "", created_at: u.created_at || "",
+              last_sign_in_at: u.last_sign_in_at || "",
+              email_confirmed_at: u.email_confirmed_at || "",
+              banned_until: u.banned_until || "",
+              user_metadata: {
+                full_name: metadata.full_name || "", nickname: metadata.nickname || "",
+                phone: metadata.phone || "", address: metadata.address || "",
+              },
+            });
+          }
+        }
+        if (batch.length < 1000 || (data.total != null && page * 1000 >= data.total)) break;
+        page += 1;
+      }
+      if (page > 1000) searchLimited = true;
+      const total = matches.length;
+      const start = (requestedPage - 1) * perPage;
+      await audit("회원 전체 검색", null, { query, matched: total, scanned_pages: page });
+      return reply({
+        users: matches.slice(start, start + perPage),
+        page: requestedPage, perPage, total, search_limited: searchLimited,
+      });
+    }
+
+    if (action === "batch_member_action") {
+      const userIds = body.user_ids;
+      const operation = String(body.operation || "");
+      const duration = String(body.duration || "24h");
+      const allowedDurations = ["24h", "168h", "720h", "876000h"];
+      if (!Array.isArray(userIds) || userIds.length < 1 || userIds.length > 100 ||
+          userIds.some((id) => typeof id !== "string" || !id)) {
+        return reply({ error: "일괄 작업은 회원 1~100명을 선택해야 합니다." }, 400);
+      }
+      if (!["ban", "unban"].includes(operation)) return reply({ error: "지원하지 않는 일괄 작업입니다." }, 400);
+      if (operation === "ban" && !allowedDurations.includes(duration)) {
+        return reply({ error: "허용되지 않은 차단 기간입니다." }, 400);
+      }
+      if (userIds.includes(user.id)) return reply({ error: "현재 로그인한 관리자 계정은 일괄 작업 대상에 포함할 수 없습니다." }, 400);
+      const uniqueIds = [...new Set(userIds)];
+      const succeeded: string[] = [];
+      const failed: { user_id: string; error: string }[] = [];
+      for (const userId of uniqueIds) {
+        const { data, error } = await admin.auth.admin.updateUserById(userId,
+          { ban_duration: operation === "ban" ? duration : "none" });
+        if (error || !data.user) {
+          failed.push({ user_id: userId, error: error?.message || "회원을 찾을 수 없습니다." });
+        } else {
+          succeeded.push(userId);
+        }
+      }
+      await audit(operation === "ban" ? "회원 일괄 차단" : "회원 일괄 차단 해제",
+        null, { requested: uniqueIds.length, succeeded: succeeded.length, failed: failed.length, duration: operation === "ban" ? duration : null });
+      return reply({ succeeded: succeeded.length, succeeded_user_ids: succeeded, failed });
     }
 
     if (action === "update_profile") {
