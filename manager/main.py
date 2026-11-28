@@ -65,6 +65,7 @@ class Manager(QMainWindow):
         outer.addWidget(side); content=QWidget(); cl=QVBoxLayout(content); cl.setContentsMargins(12,12,12,12)
         self.header=QLabel("대시보드"); self.header.setObjectName("pageTitle"); self.header.setWordWrap(True); cl.addWidget(self.header)
         self.status=QLabel("설정에서 Supabase와 GitHub를 연결해 주세요."); self.status.setObjectName("muted"); self.status.setWordWrap(True); cl.addWidget(self.status)
+        self.global_role_status=QLabel("권한: 로그인 필요"); self.global_role_status.setObjectName("roleStatus"); self.global_role_status.setWordWrap(True); cl.addWidget(self.global_role_status)
         cl.addSpacing(16); cl.addWidget(self.stack); outer.addWidget(content,1)
         self.go(0); self.refresh_dashboard()
 
@@ -261,11 +262,13 @@ class Manager(QMainWindow):
             if error:
                 self.store.clear_admin_session(); self.member_status.setText("로그인 실패: "+error)
                 self.admin_role_status.setText("권한: 확인 실패")
+                self.global_role_status.setText("권한: 확인 실패")
                 return
             role=result.get("role","admin")
             role_label="최고 관리자" if role=="super_admin" else "일반 관리자"
             self.member_status.setText("관리자 인증 완료 · "+email)
             self.admin_role_status.setText(f"권한: {role_label} · 서버에서 권한을 검증합니다.")
+            self.global_role_status.setText(f"권한: {role_label} · 서버 검증")
             self.log_line("관리자 인증 완료 · "+role_label)
             self.load_members()
             self.refresh_dashboard_stats()
@@ -275,6 +278,7 @@ class Manager(QMainWindow):
         self.store.clear_admin_session(); self.members_table.setRowCount(0)
         self.member_status.setText("로그아웃했습니다.")
         self.admin_role_status.setText("권한: 로그인 필요")
+        self.global_role_status.setText("권한: 로그인 필요")
         self.log_line("관리자 로그아웃")
     def load_members(self):
         session=self.store.admin_session()
