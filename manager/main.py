@@ -6,7 +6,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
-    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy, QTabWidget, QCheckBox)
+    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy, QTabWidget, QCheckBox, QComboBox, QAbstractItemView)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
 PINK = "#E66D98"
@@ -341,6 +341,21 @@ class Manager(QMainWindow):
         tools.addWidget(self.button("회원 차단",self.ban_member))
         tools.addWidget(self.button("차단 해제",self.unban_member))
         l.addLayout(tools)
+        member_actions=QHBoxLayout()
+        member_actions.addWidget(self.button("선택 회원 일괄 차단",self.batch_ban_members))
+        member_actions.addWidget(self.button("선택 회원 일괄 해제",self.batch_unban_members))
+        member_actions.addWidget(self.button("회원 상세 보기",self.show_member_detail))
+        member_actions.addWidget(QLabel("상태 필터"))
+        self.member_status_filter=QComboBox()
+        self.member_status_filter.addItem("전체 상태","all")
+        self.member_status_filter.addItem("인증 완료","verified")
+        self.member_status_filter.addItem("미인증","unverified")
+        self.member_status_filter.addItem("차단 중","banned")
+        self.member_status_filter.addItem("정상","active")
+        self.member_status_filter.currentIndexChanged.connect(self.filter_member_rows)
+        member_actions.addWidget(self.member_status_filter)
+        member_actions.addStretch()
+        l.addLayout(member_actions)
         page_tools=QHBoxLayout()
         self.member_page=1
         self.member_page_status=QLabel("페이지 정보 대기 중")
@@ -354,6 +369,7 @@ class Manager(QMainWindow):
         self.members_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self._member_map={}
         self.members_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.members_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.members_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.members_table.setAlternatingRowColors(True)
         l.addWidget(self.members_table,1)
@@ -424,6 +440,7 @@ class Manager(QMainWindow):
             self._member_total=result.get("total")
             self.members_table.setRowCount(len(users))
             self._member_map={u.get('id'):u for u in users}
+            self._member_cache=users
             for i,u in enumerate(users):
                 meta=u.get("user_metadata") or {}
                 confirmed=bool(u.get("email_confirmed_at") or u.get("confirmed_at"))
@@ -443,7 +460,10 @@ class Manager(QMainWindow):
                     self.members_table.setItem(i,j,item)
             total_text=f"{self._member_total:,}명" if self._member_total is not None else "전체 인원 확인 불가"
             self.member_page_status.setText(f"{self.member_page}페이지 · {len(users)}명 표시 · 전체 {total_text}")
-            self.member_status.setText(f"회원 {len(users)}명 표시 중 · 페이지당 최대 100명. 검색은 현재 페이지에서 적용됩니다.")
+            self.filter_member_rows()
+            search_note="검색 결과" if query.strip() else "회원 목록"
+            limit_note=" · 검색 범위 100만 명 제한에 도달함" if result.get("search_limited") else ""
+            self.member_status.setText(f"{search_note} {len(users)}명 표시 중 · 페이지당 최대 100명{limit_note}")
             self.log_line(f"회원 목록 {self.member_page}페이지 · {len(users)}명 조회")
         self.run_async(lambda:self.admin_users.list_users_page(self.member_page,100,query),done)
     def export_all_members_csv(self):
@@ -511,6 +531,113 @@ class Manager(QMainWindow):
             self.log_line(f"회원 목록 CSV 내보내기 완료 · {self.members_table.rowCount()}명")
         except Exception as exc:
             QMessageBox.warning(self,"내보내기 실패",str(exc))
+
+    def filter_member_rows(self):
+        if not hasattr(self,"members_table") or not hasattr(self,"member_status_filter"):
+            return
+        mode=self.member_status_filter.currentData()
+        visible=0
+        for row in range(self.members_table.rowCount()):
+            verified=self.members_table.item(row,4).text()=="인증 완료" if self.members_table.item(row,4) else False
+            status=self.members_table.item(row,5).text() if self.members_table.item(row,5) else ""
+            show=(mode=="all" or
+                  (mode=="verified" and verified) or
+                  (mode=="unverified" and not verified) or
+                  (mode=="banned" and status=="차단 중") or
+                  (mode=="active" and status=="정상"))
+            self.members_table.setRowHidden(row,not show)
+            if show: visible+=1
+        if hasattr(self,"member_page_status"):
+            self.member_page_status.setToolTip(f"상태 필터 결과 {visible}명")
+
+    def selected_member_ids(self):
+        rows=sorted({index.row() for index in self.members_table.selectionModel().selectedRows()})
+        selected=[]
+        for row in rows:
+            item=self.members_table.item(row,0)
+            if item:
+                user_id=item.data(Qt.UserRole)
+                if user_id: selected.append((user_id,item.text()))
+        return selected
+
+    def show_member_detail(self):
+        row=self.members_table.currentRow()
+        if row<0:
+            selected=self.members_table.selectionModel().selectedRows()
+            row=selected[0].row() if selected else -1
+        if row<0:
+            QMessageBox.information(self,"회원 선택","상세 정보를 확인할 회원을 선택해 주세요.")
+            return
+        item=self.members_table.item(row,0)
+        user_id=item.data(Qt.UserRole) if item else None
+        user=getattr(self,"_member_map",{}).get(user_id,{})
+        meta=user.get("user_metadata") or {}
+        confirmed=bool(user.get("email_confirmed_at"))
+        details=[
+            f"이메일: {user.get('email','-')}",
+            f"이름: {meta.get('full_name','-')}",
+            f"닉네임: {meta.get('nickname','-')}",
+            f"휴대폰: {meta.get('phone','-')}",
+            f"주소: {meta.get('address','-')}",
+            f"이메일 인증: {'완료' if confirmed else '미인증'}",
+            f"계정 상태: {self.members_table.item(row,5).text() if self.members_table.item(row,5) else '-'}",
+            f"가입일: {user.get('created_at','-')}",
+            f"최근 로그인: {user.get('last_sign_in_at','-')}",
+            f"회원 ID: {user_id or '-'}",
+        ]
+        QMessageBox.information(self,"회원 상세 정보","\\n".join(details))
+
+    def batch_ban_members(self):
+        selected=self.selected_member_ids()
+        if not selected:
+            QMessageBox.information(self,"회원 선택","Ctrl 또는 Shift를 이용해 차단할 회원을 여러 명 선택해 주세요.")
+            return
+        choices=["24시간","7일","30일","장기 차단(약 100년)"]
+        choice,ok=QInputDialog.getItem(self,"일괄 회원 차단",f"선택한 {len(selected)}명의 차단 기간을 선택하세요.",choices,0,False)
+        if not ok: return
+        duration={"24시간":"24h","7일":"168h","30일":"720h","장기 차단(약 100년)":"876000h"}[choice]
+        preview="\\n".join(email for _,email in selected[:8])
+        if len(selected)>8: preview+=f"\\n외 {len(selected)-8}명"
+        if QMessageBox.question(self,"일괄 차단 확인",
+            f"선택한 {len(selected)}명을 {choice} 동안 차단할까요?\\n\\n{preview}",
+            QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        self.member_status.setText(f"{len(selected)}명 일괄 차단 처리 중...")
+        def done(result,error):
+            if error:
+                self.member_status.setText("일괄 차단 실패: "+error)
+                QMessageBox.warning(self,"일괄 차단 실패",error)
+                return
+            succeeded=result.get("succeeded",0); failed=result.get("failed",[])
+            self.log_line(f"회원 일괄 차단 완료 · 성공 {succeeded}명 / 실패 {len(failed)}명")
+            QMessageBox.information(self,"일괄 차단 결과",
+                f"성공: {succeeded}명\\n실패: {len(failed)}명"+
+                ("\\n\\n"+", ".join(x.get("email",x.get("user_id","")) for x in failed[:5]) if failed else ""))
+            self.load_members()
+        self.run_async(lambda:self.admin_users.batch_member_action([x[0] for x in selected],"ban",duration),done)
+
+    def batch_unban_members(self):
+        selected=self.selected_member_ids()
+        if not selected:
+            QMessageBox.information(self,"회원 선택","Ctrl 또는 Shift를 이용해 차단 해제할 회원을 여러 명 선택해 주세요.")
+            return
+        preview="\\n".join(email for _,email in selected[:8])
+        if len(selected)>8: preview+=f"\\n외 {len(selected)-8}명"
+        if QMessageBox.question(self,"일괄 차단 해제 확인",
+            f"선택한 {len(selected)}명의 차단을 해제할까요?\\n\\n{preview}",
+            QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        self.member_status.setText(f"{len(selected)}명 일괄 차단 해제 처리 중...")
+        def done(result,error):
+            if error:
+                self.member_status.setText("일괄 차단 해제 실패: "+error)
+                QMessageBox.warning(self,"일괄 차단 해제 실패",error)
+                return
+            succeeded=result.get("succeeded",0); failed=result.get("failed",[])
+            self.log_line(f"회원 일괄 차단 해제 완료 · 성공 {succeeded}명 / 실패 {len(failed)}명")
+            QMessageBox.information(self,"일괄 차단 해제 결과",
+                f"성공: {succeeded}명\\n실패: {len(failed)}명"+
+                ("\\n\\n"+", ".join(x.get("email",x.get("user_id","")) for x in failed[:5]) if failed else ""))
+            self.load_members()
+        self.run_async(lambda:self.admin_users.batch_member_action([x[0] for x in selected],"unban"),done)
 
     def selected_member(self):
         row=self.members_table.currentRow()
