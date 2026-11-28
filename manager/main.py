@@ -1,7 +1,7 @@
 import sys
 import json
 import csv
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -120,6 +120,29 @@ class Manager(QMainWindow):
             stats_grid.addWidget(c,i//2,i%2)
         l.addLayout(stats_grid)
         l.addWidget(self.button("회원·서비스 통계 새로고침",self.refresh_dashboard_stats,True))
+        l.addWidget(self.title_block("기간별 운영 분석","최근 회원 활동 로그 기준 · 최대 200건 · 전체 기간 통계가 아닌 조회된 기록의 집계입니다."))
+        analytics_tools=QHBoxLayout()
+        self.analytics_days=7
+        analytics_tools.addWidget(QLabel("조회 기간"))
+        for days,label in ((7,"최근 7일"),(30,"최근 30일"),(90,"최근 90일")):
+            analytics_tools.addWidget(self.button(label,lambda checked=False,d=days:self.set_analytics_period(d),days==7))
+        analytics_tools.addStretch()
+        analytics_tools.addWidget(self.button("분석 새로고침",self.refresh_activity_analytics))
+        l.addLayout(analytics_tools)
+        analytics_cards=QGridLayout(); analytics_cards.setSpacing(8)
+        self.analytics_total=Card("기간 내 활동 기록","-","최근 활동 로그 기준")
+        self.analytics_signups=Card("회원가입 기록","-","활동 로그에 남은 가입")
+        self.analytics_logins=Card("로그인 기록","-","활동 로그에 남은 로그인")
+        for i,card in enumerate((self.analytics_total,self.analytics_signups,self.analytics_logins)):
+            analytics_cards.addWidget(card,0,i)
+        l.addLayout(analytics_cards)
+        self.analytics_table=QTableWidget(0,4)
+        self.analytics_table.setHorizontalHeaderLabels(["날짜","회원가입","로그인","기타 활동"])
+        self.analytics_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.analytics_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.analytics_table.setAlternatingRowColors(True)
+        self.analytics_table.setMaximumHeight(250)
+        l.addWidget(self.analytics_table)
         l.addWidget(QLabel("최근 가입 회원"))
         self.recent_members=QTableWidget(0,4)
         self.recent_members.setHorizontalHeaderLabels(["이메일","이름","닉네임","가입일"])
@@ -153,6 +176,60 @@ class Manager(QMainWindow):
             self.log_line("GitHub 저장소 연결 확인 완료")
         self.run_async(gh,done)
         self.refresh_dashboard_stats()
+    def set_analytics_period(self, days):
+        self.analytics_days=days
+        self.refresh_activity_analytics()
+
+    def refresh_activity_analytics(self):
+        if not self.store.admin_session().get("access_token"):
+            self.analytics_total.set_value("로그인 필요","회원 관리에서 관리자 로그인")
+            self.analytics_signups.set_value("로그인 필요")
+            self.analytics_logins.set_value("로그인 필요")
+            self.analytics_table.setRowCount(0)
+            return
+        self.analytics_total.set_value("조회 중...")
+        self.analytics_signups.set_value("조회 중...")
+        self.analytics_logins.set_value("조회 중...")
+        self.run_async(self.admin_users.list_activity_logs,self.render_activity_analytics)
+
+    def render_activity_analytics(self, rows, error):
+        if error:
+            for card in (self.analytics_total,self.analytics_signups,self.analytics_logins):
+                card.set_value("조회 실패",error)
+            self.analytics_table.setRowCount(0)
+            return
+        from collections import defaultdict
+        days=self.analytics_days
+        today=datetime.now().astimezone().date()
+        start=today-timedelta(days=days-1)
+        daily=defaultdict(lambda:{"signup":0,"login":0,"other":0})
+        total=signups=logins=0
+        for row in (rows or []):
+            stamp=row.get("created_at") or ""
+            try:
+                day=datetime.fromisoformat(stamp.replace("Z","+00:00")).astimezone().date()
+            except Exception:
+                continue
+            if day<start or day>today:
+                continue
+            action=str(row.get("action") or "")
+            bucket="signup" if "회원가입" in action else ("login" if "로그인" in action else "other")
+            daily[day][bucket]+=1
+            total+=1
+            if bucket=="signup": signups+=1
+            elif bucket=="login": logins+=1
+        self.analytics_total.set_value(f"{total:,}건",f"최근 {days}일 · 조회된 최대 200건")
+        self.analytics_signups.set_value(f"{signups:,}건","회원가입 활동 로그")
+        self.analytics_logins.set_value(f"{logins:,}건","로그인 활동 로그")
+        self.analytics_table.setRowCount(days)
+        for index in range(days):
+            day=start+timedelta(days=index)
+            values=[day.isoformat(),daily[day]["signup"],daily[day]["login"],daily[day]["other"]]
+            for col,value in enumerate(values):
+                self.analytics_table.setItem(index,col,QTableWidgetItem(str(value)))
+        self.analytics_table.scrollToBottom()
+        self.log_line(f"기간별 운영 분석 갱신 완료 · 최근 {days}일 · 활동 {total}건")
+
     def refresh_dashboard_stats(self):
         session=self.store.admin_session()
         if not session.get("access_token"):
