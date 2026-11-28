@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy, QTabWidget, QCheckBox, QComboBox, QAbstractItemView)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 PINK = "#E66D98"
 DARK = "#493443"
 MUTED = "#8C7885"
