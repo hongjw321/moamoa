@@ -137,6 +137,12 @@ class Manager(QMainWindow):
         for i,card in enumerate((self.analytics_total,self.analytics_signups,self.analytics_logins)):
             analytics_cards.addWidget(card,0,i)
         l.addLayout(analytics_cards)
+        self.analytics_chart=QTableWidget(0,4)
+        self.analytics_chart.setHorizontalHeaderLabels(["날짜","회원가입 추이","로그인 추이","기타 활동"])
+        self.analytics_chart.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.analytics_chart.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.analytics_chart.setMaximumHeight(260)
+        l.addWidget(self.analytics_chart)
         self.analytics_table=QTableWidget(0,4)
         self.analytics_table.setHorizontalHeaderLabels(["날짜","회원가입","로그인","기타 활동"])
         self.analytics_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -191,7 +197,7 @@ class Manager(QMainWindow):
         self.analytics_total.set_value("조회 중...")
         self.analytics_signups.set_value("조회 중...")
         self.analytics_logins.set_value("조회 중...")
-        self.run_async(self.admin_users.list_activity_logs,self.render_activity_analytics)
+        self.run_async(lambda:self.admin_users.list_activity_analytics(self.analytics_days),self.render_activity_analytics)
 
     def render_activity_analytics(self, rows, error):
         if error:
@@ -219,15 +225,27 @@ class Manager(QMainWindow):
             total+=1
             if bucket=="signup": signups+=1
             elif bucket=="login": logins+=1
-        self.analytics_total.set_value(f"{total:,}건",f"최근 {days}일 · 조회된 최대 200건")
+        capped=len(rows or [])>=10000
+        self.analytics_total.set_value(f"{total:,}건",f"최근 {days}일 · "+("최대 10,000건 조회 제한" if capped else "기간 내 조회된 활동 전체"))
         self.analytics_signups.set_value(f"{signups:,}건","회원가입 활동 로그")
         self.analytics_logins.set_value(f"{logins:,}건","로그인 활동 로그")
         self.analytics_table.setRowCount(days)
+        self.analytics_chart.setRowCount(days)
+        maxima={key:max([daily[start+timedelta(days=i)][key] for i in range(days)]+[1])
+                for key in ("signup","login","other")}
         for index in range(days):
             day=start+timedelta(days=index)
             values=[day.isoformat(),daily[day]["signup"],daily[day]["login"],daily[day]["other"]]
-            for col,value in enumerate(values):
+            self.analytics_table.setItem(index,0,QTableWidgetItem(values[0]))
+            self.analytics_chart.setItem(index,0,QTableWidgetItem(values[0][5:]))
+            for col,key in enumerate(("signup","login","other"),start=1):
+                value=values[col]
                 self.analytics_table.setItem(index,col,QTableWidgetItem(str(value)))
+                bar=QProgressBar()
+                bar.setRange(0,maxima[key])
+                bar.setValue(value)
+                bar.setFormat(f"{value:,}건")
+                self.analytics_chart.setCellWidget(index,col,bar)
         self.analytics_table.scrollToBottom()
         self.log_line(f"기간별 운영 분석 갱신 완료 · 최근 {days}일 · 활동 {total}건")
 
@@ -750,8 +768,22 @@ class Manager(QMainWindow):
         self.data_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.data_table.setAlternatingRowColors(True)
         l.addWidget(self.data_table,1)
+        l.addWidget(QLabel("로컬 백업 이력 · 이 PC의 MOAMOA Manager 폴더에 저장됩니다."))
+        backup_tools=QHBoxLayout()
+        backup_tools.addWidget(self.button("현재 데이터 안전 백업",self.create_safety_backup,True))
+        backup_tools.addWidget(self.button("백업 이력 새로고침",self.refresh_backup_history))
+        backup_tools.addWidget(self.button("선택 백업 파일 열기",self.open_selected_backup))
+        l.addLayout(backup_tools)
+        self.backup_history_table=QTableWidget(0,4)
+        self.backup_history_table.setHorizontalHeaderLabels(["백업 시각","백업 유형","데이터 건수","파일 경로"])
+        self.backup_history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.backup_history_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.backup_history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.backup_history_table.setMaximumHeight(190)
+        l.addWidget(self.backup_history_table)
         l.addWidget(self.button("Supabase Table Editor 열기",lambda: QDesktopServices.openUrl(QUrl("https://supabase.com/dashboard/project/gugyczralmtvowfhulqe/editor"))))
         self._data_records=[]
+        self.refresh_backup_history()
         return w
     def load_data(self):
         session=self.store.admin_session()
@@ -776,6 +808,42 @@ class Manager(QMainWindow):
             self.data_status.setText(f"회원 데이터 {len(records)}건 조회 완료 (한 번에 최대 500건).")
             self.log_line(f"회원 데이터 {len(records)}건 조회")
         self.run_async(self.admin_users.list_data,done)
+    def refresh_backup_history(self):
+        if not hasattr(self,"backup_history_table"): return
+        rows=self.store.load_backup_history()
+        self.backup_history_table.setRowCount(len(rows))
+        for i,row in enumerate(rows):
+            vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),
+                  row.get("label","백업"),row.get("record_count",0),row.get("path","")]
+            for j,value in enumerate(vals):
+                item=QTableWidgetItem(str(value))
+                if j==0: item.setData(Qt.UserRole,row.get("path",""))
+                self.backup_history_table.setItem(i,j,item)
+        if hasattr(self,"data_status"):
+            self.data_status.setToolTip(f"이 PC에 저장된 백업 이력 {len(rows)}건")
+
+    def open_selected_backup(self):
+        row=self.backup_history_table.currentRow()
+        if row<0:
+            QMessageBox.information(self,"백업 선택","열 백업 파일을 먼저 선택해 주세요."); return
+        item=self.backup_history_table.item(row,0)
+        path=item.data(Qt.UserRole) if item else ""
+        if not path or not __import__("pathlib").Path(path).exists():
+            QMessageBox.warning(self,"파일 확인","백업 파일을 찾을 수 없습니다."); return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+
+    def create_safety_backup(self):
+        if not self._data_records:
+            QMessageBox.information(self,"백업할 데이터 없음","먼저 데이터 새로고침을 눌러 최신 데이터를 불러와 주세요."); return
+        try:
+            path=self.store.create_local_backup(self._data_records,"수동 안전 백업")
+            self.refresh_backup_history()
+            self.data_status.setText(f"안전 백업 완료 · {len(self._data_records)}건")
+            self.log_line(f"로컬 안전 백업 생성 · {len(self._data_records)}건")
+            QMessageBox.information(self,"백업 완료",f"현재 조회된 {len(self._data_records)}건을 백업했습니다.\\n{path}")
+        except Exception as exc:
+            QMessageBox.warning(self,"백업 실패",str(exc))
+
     def export_data(self,selected_only=False):
         records=self._data_records
         if selected_only:
@@ -791,6 +859,8 @@ class Manager(QMainWindow):
         backup={"format":"MOAMOA_DATA_BACKUP","version":1,"created_at":datetime.now(timezone.utc).isoformat(),"records":records}
         try:
             with open(path,"w",encoding="utf-8") as f: json.dump(backup,f,ensure_ascii=False,indent=2)
+            self.store.record_backup(path,len(records),"선택 회원 백업" if selected_only else "파일 내보내기")
+            self.refresh_backup_history()
             self.data_status.setText(f"백업 저장 완료: {len(records)}건")
             self.log_line(f"회원 데이터 백업 저장: {len(records)}건")
             QMessageBox.information(self,"백업 완료",f"{len(records)}건의 데이터를 백업했습니다.\n{path}")
@@ -814,15 +884,30 @@ class Manager(QMainWindow):
             f"{len(records)}건의 회원 데이터를 복구할까요?\n같은 회원의 기존 데이터는 백업 파일 내용으로 덮어씁니다.\n복구 전에 현재 데이터를 먼저 백업하는 것을 권장합니다.",
             QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
         if answer!=QMessageBox.Yes: return
-        self.data_status.setText("데이터를 복구하는 중...")
-        def done(result,error):
+        self.data_status.setText("복구 전 현재 데이터를 안전 백업하는 중...")
+        def prepare_restore(current,error):
             if error:
-                self.data_status.setText("복구 실패: "+error); QMessageBox.warning(self,"복구 실패",error); return
-            self.data_status.setText(f"데이터 복구 완료: {result.get('restored',0)}건")
-            self.log_line(f"회원 데이터 복구 완료: {result.get('restored',0)}건")
-            self.load_data()
-            QMessageBox.information(self,"복구 완료",f"{result.get('restored',0)}건의 데이터를 복구했습니다.")
-        self.run_async(lambda:self.admin_users.restore_data(records),done)
+                self.data_status.setText("복구 전 안전 백업 실패: "+error)
+                QMessageBox.warning(self,"복구 중단","현재 데이터 안전 백업을 만들지 못해 복구를 중단했습니다.\\n"+error)
+                return
+            try:
+                backup_path=self.store.create_local_backup(current,"복구 직전 자동 백업")
+                self.refresh_backup_history()
+            except Exception as exc:
+                self.data_status.setText("안전 백업 저장 실패: "+str(exc))
+                QMessageBox.warning(self,"복구 중단","복구 전 백업 파일을 저장하지 못해 복구를 중단했습니다.\\n"+str(exc))
+                return
+            self.data_status.setText("데이터를 복구하는 중...")
+            def done(result,restore_error):
+                if restore_error:
+                    self.data_status.setText("복구 실패: "+restore_error)
+                    QMessageBox.warning(self,"복구 실패",restore_error); return
+                self.data_status.setText(f"데이터 복구 완료: {result.get('restored',0)}건")
+                self.log_line(f"회원 데이터 복구 완료: {result.get('restored',0)}건 · 사전 백업 저장")
+                self.load_data()
+                QMessageBox.information(self,"복구 완료",f"{result.get('restored',0)}건의 데이터를 복구했습니다.\\n복구 직전 백업: {backup_path}")
+            self.run_async(lambda:self.admin_users.restore_data(records),done)
+        self.run_async(self.admin_users.list_data,prepare_restore)
     def operations_page(self):
         w=QWidget(); outer=QVBoxLayout(w)
         outer.addWidget(self.title_block("운영 관리","공지사항을 게시하고 회원 활동 및 시스템 오류 이력을 확인합니다."))
@@ -875,8 +960,8 @@ class Manager(QMainWindow):
         error_tools.addWidget(self.error_search,1)
         error_tools.addWidget(self.button("CSV 내보내기",self.export_error_logs))
         el.addLayout(error_tools)
-        self.error_table=QTableWidget(0,4)
-        self.error_table.setHorizontalHeaderLabels(["발생 시각","발생 위치","오류 내용","상세 정보"])
+        self.error_table=QTableWidget(0,5)
+        self.error_table.setHorizontalHeaderLabels(["중요도","발생 시각","발생 위치","오류 내용","상세 정보"])
         self.error_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.error_table.setEditTriggers(QTableWidget.NoEditTriggers); self.error_table.setAlternatingRowColors(True)
         el.addWidget(self.error_table,1)
@@ -1002,9 +1087,23 @@ class Manager(QMainWindow):
         self.error_table.setRowCount(len(rows))
         for i,row in enumerate(rows):
             details=json.dumps(row.get("details") or {},ensure_ascii=False)
-            vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("source") or "-",row.get("message") or "-",details[:500]]
-            for j,value in enumerate(vals): self.error_table.setItem(i,j,QTableWidgetItem(str(value)))
-        self.error_status.setText(f"검색 결과 {len(rows)}건 / 전체 {len(getattr(self,'_error_rows',[]))}건 · 최근 최대 200건")
+            severity=self.classify_error_severity(row)
+            vals=[severity,str(row.get("created_at") or "-")[:19].replace("T"," "),
+                  row.get("source") or "-",row.get("message") or "-",details[:500]]
+            for j,value in enumerate(vals):
+                item=QTableWidgetItem(str(value))
+                if j==0: item.setData(Qt.UserRole,severity)
+                self.error_table.setItem(i,j,item)
+        self.error_status.setText(f"검색 결과 {len(rows)}건 / 전체 {len(getattr(self,'_error_rows',[]))}건 · 최근 최대 200건 · 중요도 자동 분류")
+
+    def classify_error_severity(self,row):
+        message=(str(row.get("message") or "")+" "+str(row.get("source") or "")).lower()
+        critical_terms=("permission denied","service_role","unauthorized","forbidden","credential","secret","token","database","42501")
+        high_terms=("500","timeout","timed out","connection","failed","exception","traceback","error")
+        if any(term in message for term in critical_terms): return "긴급"
+        if any(term in message for term in high_terms): return "높음"
+        if any(term in message for term in ("warning","retry","limit","rate")): return "주의"
+        return "정보"
 
     def export_error_logs(self):
         rows=getattr(self,"_error_rows",[])
@@ -1015,8 +1114,8 @@ class Manager(QMainWindow):
                 json.dumps(row.get("details") or {},ensure_ascii=False)
             ]).lower()]
         self.export_log_csv(rows,"moamoa-error-logs.csv","오류 로그",
-            ["발생 시각","발생 위치","오류 내용","상세 정보"],
-            lambda row:[row.get("created_at") or "",row.get("source") or "",row.get("message") or "",json.dumps(row.get("details") or {},ensure_ascii=False)])
+            ["중요도","발생 시각","발생 위치","오류 내용","상세 정보"],
+            lambda row:[self.classify_error_severity(row),row.get("created_at") or "",row.get("source") or "",row.get("message") or "",json.dumps(row.get("details") or {},ensure_ascii=False)])
 
     def export_log_csv(self,rows,default_name,title,headers,row_values):
         if not rows:
@@ -1066,6 +1165,13 @@ class Manager(QMainWindow):
         activity_tools.addWidget(self.admin_activity_search,1)
         activity_tools.addWidget(self.button("CSV 내보내기",self.export_admin_activity_logs))
         l.addLayout(activity_tools)
+        l.addWidget(QLabel("관리자별 작업량 요약"))
+        self.admin_workload_table=QTableWidget(0,4)
+        self.admin_workload_table.setHorizontalHeaderLabels(["관리자 이메일","권한","작업 건수","최근 활동"])
+        self.admin_workload_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.admin_workload_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.admin_workload_table.setMaximumHeight(160)
+        l.addWidget(self.admin_workload_table)
         self.admin_activity_table=QTableWidget(0,5)
         self.admin_activity_table.setHorizontalHeaderLabels(["발생 시각","관리자 이메일","권한","활동","상세 정보"])
         self.admin_activity_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -1116,8 +1222,22 @@ class Manager(QMainWindow):
                   detail_text[:500]]
             for j,value in enumerate(vals):
                 self.admin_activity_table.setItem(i,j,QTableWidgetItem(str(value)))
+        totals={}
+        for item in getattr(self,"_admin_activity_rows",[]):
+            details=item.get("details") or {}
+            email=item.get("email") or details.get("actor_email") or "이메일 없음"
+            entry=totals.setdefault(email,{"role":details.get("admin_role") or "-","count":0,"latest":item.get("created_at") or ""})
+            entry["count"]+=1
+            stamp=item.get("created_at") or ""
+            if stamp>entry["latest"]: entry["latest"]=stamp
+        ordered=sorted(totals.items(),key=lambda pair:pair[1]["count"],reverse=True)
+        self.admin_workload_table.setRowCount(len(ordered))
+        for i,(email,entry) in enumerate(ordered):
+            values=[email,"최고 관리자" if entry["role"]=="super_admin" else "일반 관리자",
+                    f"{entry['count']:,}건",str(entry["latest"])[:19].replace("T"," ")]
+            for j,value in enumerate(values): self.admin_workload_table.setItem(i,j,QTableWidgetItem(str(value)))
         total=len(getattr(self,"_admin_activity_rows",[]))
-        self.admin_activity_status.setText(f"검색 결과 {len(rows)}건 / 전체 {total}건 · 최근 최대 500건")
+        self.admin_activity_status.setText(f"검색 결과 {len(rows)}건 / 전체 {total}건 · 최근 최대 500건 · 관리자 {len(ordered)}명")
 
     def export_admin_activity_logs(self):
         rows=self.filtered_admin_activity_rows()
