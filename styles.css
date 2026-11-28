@@ -179,3 +179,11 @@ button,.hamb{font-family:'Noto Sans KR',sans-serif}
 .delete-row input[type=text]{min-width:0;height:40px;border:1px solid #edcbd5;border-radius:10px;padding:0 10px;background:white;color:#795365}
 .btn.danger{background:#b84e68;color:white;border:0}
 .account-danger>small{display:block;font-size:10px;line-height:1.6;color:#a78393;margin-top:8px}
+
+.announcement-section[hidden]{display:none}
+.announcement-section{padding-top:28px}
+.announcement-feed{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.announcement-card{background:#fff;border:1px solid var(--line);border-radius:17px;padding:17px 19px;box-shadow:0 7px 22px #bb80951b}
+.announcement-card h3{font:19px Jua;color:#79465d;margin:0 0 7px}
+.announcement-card time{display:block;font-size:10px;color:#bc8da0;margin-bottom:10px}
+.announcement-card p{font-size:12px;line-height:1.75;color:#8e7180;white-space:pre-line;margin:0;overflow-wrap:anywhere}
