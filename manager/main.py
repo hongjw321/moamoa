@@ -409,6 +409,9 @@ class Manager(QMainWindow):
         if not session.get("access_token"):
             self.member_status.setText("먼저 관리자 로그인을 해주세요."); return
         query=self.member_search.text()
+        if query != getattr(self,"_member_last_query",""):
+            self.member_page=1
+            self._member_last_query=query
         self.member_status.setText(f"{self.member_page}페이지 회원 목록을 불러오는 중...")
         def done(result,error):
             if error:
