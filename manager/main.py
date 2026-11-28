@@ -126,6 +126,8 @@ class Manager(QMainWindow):
         tools.addWidget(self.button("검색 및 새로고침",self.load_members,True))
         tools.addWidget(self.button("회원 정보 수정",self.edit_member))
         tools.addWidget(self.button("회원 삭제",self.delete_member))
+        tools.addWidget(self.button("회원 차단",self.ban_member))
+        tools.addWidget(self.button("차단 해제",self.unban_member))
         l.addLayout(tools)
         self.members_table=QTableWidget(0,8)
         self.members_table.setHorizontalHeaderLabels(["이메일","이름","닉네임","휴대폰","이메일 인증","계정 상태","가입일","최근 로그인"])
@@ -216,6 +218,57 @@ class Manager(QMainWindow):
             if error: self.member_status.setText("수정 실패: "+error); return
             self.member_status.setText(email+" 회원 정보 수정 완료"); self.load_members()
         self.run_async(lambda:self.admin_users.update_profile(user_id,profile),done)
+    def ban_member(self):
+        row=self.members_table.currentRow()
+        if row<0:
+            QMessageBox.information(self,"회원 선택","차단할 회원을 먼저 선택해 주세요."); return
+        user_id=self.members_table.item(row,0).data(Qt.UserRole)
+        email=self.members_table.item(row,0).text()
+        current=getattr(self,"_member_map",{}).get(user_id,{})
+        banned_until=current.get("banned_until") or ""
+        if banned_until:
+            try:
+                expiry=datetime.fromisoformat(str(banned_until).replace("Z","+00:00"))
+                if expiry.tzinfo is None: expiry=expiry.replace(tzinfo=timezone.utc)
+                if expiry > datetime.now(timezone.utc):
+                    QMessageBox.information(self,"이미 차단된 회원","이 회원은 이미 차단 중입니다. 먼저 차단 해제를 진행해 주세요."); return
+            except Exception:
+                pass
+        choices=["24시간","7일","30일","장기 차단(약 100년)"]
+        choice,ok=QInputDialog.getItem(self,"회원 차단",f"{email} 회원의 차단 기간을 선택하세요.",choices,0,False)
+        if not ok: return
+        duration={"24시간":"24h","7일":"168h","30일":"720h","장기 차단(약 100년)":"876000h"}[choice]
+        if QMessageBox.question(self,"회원 차단 확인",f"{email} 회원을 {choice} 동안 차단할까요?\n차단 중에는 해당 회원의 로그인 및 인증된 세션 이용이 제한됩니다.",QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        self.member_status.setText("회원 차단을 적용하는 중...")
+        def done(result,error):
+            if error: self.member_status.setText("차단 실패: "+error); QMessageBox.warning(self,"차단 실패",error); return
+            self.log_line(f"회원 차단 적용: {email} ({choice})")
+            self.load_members()
+        self.run_async(lambda:self.admin_users.ban_user(user_id,duration),done)
+    def unban_member(self):
+        row=self.members_table.currentRow()
+        if row<0:
+            QMessageBox.information(self,"회원 선택","차단 해제할 회원을 먼저 선택해 주세요."); return
+        user_id=self.members_table.item(row,0).data(Qt.UserRole)
+        email=self.members_table.item(row,0).text()
+        current=getattr(self,"_member_map",{}).get(user_id,{})
+        banned_until=current.get("banned_until") or ""
+        active=False
+        try:
+            expiry=datetime.fromisoformat(str(banned_until).replace("Z","+00:00"))
+            if expiry.tzinfo is None: expiry=expiry.replace(tzinfo=timezone.utc)
+            active=expiry > datetime.now(timezone.utc)
+        except Exception:
+            pass
+        if not active:
+            QMessageBox.information(self,"차단 상태","선택한 회원은 현재 차단 중이 아닙니다."); return
+        if QMessageBox.question(self,"차단 해제 확인",f"{email} 회원의 차단을 해제할까요?",QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        self.member_status.setText("차단을 해제하는 중...")
+        def done(result,error):
+            if error: self.member_status.setText("차단 해제 실패: "+error); QMessageBox.warning(self,"차단 해제 실패",error); return
+            self.log_line("회원 차단 해제: "+email)
+            self.load_members()
+        self.run_async(lambda:self.admin_users.unban_user(user_id),done)
     def delete_member(self):
         row=self.members_table.currentRow()
         if row<0:
