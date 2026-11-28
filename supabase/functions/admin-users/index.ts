@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
       if (promoteError) throw promoteError;
     }
     const { data: adminAccount, error: accountError } = await admin.from("admin_accounts")
-      .select("email,role,is_active").eq("email", normalizedEmail).maybeSingle();
+      .select("email,role,is_active,capabilities").eq("email", normalizedEmail).maybeSingle();
     if (accountError) throw accountError;
     if (!adminAccount || adminAccount.is_active !== true) {
       return reply({ error: "관리자 권한이 없거나 비활성화된 계정입니다." }, 403);
@@ -79,6 +79,16 @@ Deno.serve(async (req) => {
     const isSuperAdmin = adminAccount.role === "super_admin" &&
       configuredSuperAdmins.includes(normalizedEmail);
     const adminRole = isSuperAdmin ? "super_admin" : "admin";
+    const defaultCapabilities = ["members_read", "announcements_manage", "activity_logs_read"];
+    const allowedCapabilities = new Set([
+      "members_read", "members_edit", "members_ban", "members_delete",
+      "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read",
+    ]);
+    const adminCapabilities: string[] = isSuperAdmin
+      ? [...allowedCapabilities, "admins_manage"]
+      : (Array.isArray(adminAccount.capabilities)
+          ? adminAccount.capabilities.filter((value: unknown) => typeof value === "string" && allowedCapabilities.has(value as string))
+          : defaultCapabilities);
     const body = await req.json();
     const action = String(body.action || "");
     currentAction = action;
@@ -95,24 +105,49 @@ Deno.serve(async (req) => {
       return reply({
         email: actorEmail,
         role: adminRole,
-        capabilities: isSuperAdmin
-          ? ["members_read", "members_edit", "members_ban", "members_delete", "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read", "admins_manage"]
-          : ["members_read", "announcements_manage", "activity_logs_read"],
+        capabilities: adminCapabilities,
       });
     }
 
     const superAdminOnlyActions = new Set([
       "list_admin_accounts", "list_admin_activity_logs", "add_admin_account", "set_admin_active",
-      "update_profile", "ban_user", "unban_user", "batch_member_action", "list_data",
-      "restore_data", "delete_user", "list_error_logs",
+      "set_admin_capabilities",
     ]);
     if (!isSuperAdmin && superAdminOnlyActions.has(action)) {
       return reply({ error: "이 작업은 최고 관리자 권한이 필요합니다." }, 403);
     }
+    const actionCapability: Record<string, string> = {
+      list: "members_read", search: "members_read", update_profile: "members_edit",
+      ban_user: "members_ban", unban_user: "members_ban", batch_member_action: "members_ban",
+      delete_user: "members_delete", list_data: "data_read", restore_data: "data_restore",
+      list_announcements: "announcements_manage", save_announcement: "announcements_manage",
+      delete_announcement: "announcements_manage", list_activity_logs: "activity_logs_read",
+      list_error_logs: "error_logs_read",
+    };
+    const requiredCapability = actionCapability[action];
+    if (!isSuperAdmin && requiredCapability && !adminCapabilities.includes(requiredCapability)) {
+      return reply({ error: "이 작업에 필요한 관리자 권한이 부여되지 않았습니다." }, 403);
+    }
+
+    if (action === "set_admin_capabilities") {
+      const email=String(body.email || "").trim().toLowerCase();
+      const requested=body.capabilities;
+      const validCapabilities=["members_read","members_edit","members_ban","members_delete","data_read","data_restore","announcements_manage","activity_logs_read","error_logs_read"];
+      if (!email || !Array.isArray(requested) || requested.some((value: unknown)=>typeof value!=="string" || !validCapabilities.includes(value))) {
+        return reply({error:"관리자 이메일 또는 권한 목록이 올바르지 않습니다."},400);
+      }
+      const {data,error}=await admin.from("admin_accounts")
+        .update({capabilities:[...new Set(requested)],updated_at:new Date().toISOString()})
+        .eq("email",email).eq("role","admin").select("email,capabilities").maybeSingle();
+      if(error) throw error;
+      if(!data) return reply({error:"일반 관리자 계정을 찾을 수 없습니다."},404);
+      await audit("관리자 권한 변경",null,{target_email:email,capabilities:data.capabilities});
+      return reply({saved:true,email,capabilities:data.capabilities});
+    }
 
     if (action === "list_admin_accounts") {
       const { data, error } = await admin.from("admin_accounts")
-        .select("email,role,is_active,created_at,updated_at")
+        .select("email,role,is_active,capabilities,created_at,updated_at")
         .order("created_at", { ascending: true });
       if (error) throw error;
       return reply({ admins: data || [] });
