@@ -882,8 +882,8 @@ class Manager(QMainWindow):
                 raise ValueError("MOAMOA 백업 파일 형식이 올바르지 않습니다.")
             records=backup["records"]
             if not records or len(records)>500: raise ValueError("복구 가능한 데이터는 1~500건입니다.")
-            expected_digest=backup.get("sha256")
-            if expected_digest:
+            if "sha256" in backup:
+                expected_digest=backup.get("sha256")
                 canonical=json.dumps(records,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
                 actual_digest=hashlib.sha256(canonical).hexdigest()
                 if not isinstance(expected_digest,str) or not hmac.compare_digest(expected_digest,actual_digest):
@@ -895,8 +895,9 @@ class Manager(QMainWindow):
                     raise ValueError("백업 파일의 회원 ID 또는 payload 형식이 올바르지 않습니다.")
         except Exception as exc:
             QMessageBox.warning(self,"백업 파일 확인",str(exc)); return
+        legacy_note="\\n\\n이 백업은 체크섬이 없는 구버전 파일입니다. 구조 검증만 수행했습니다." if legacy_backup else ""
         answer=QMessageBox.question(self,"데이터 복구 확인",
-            f"{len(records)}건의 회원 데이터를 복구할까요?\n같은 회원의 기존 데이터는 백업 파일 내용으로 덮어씁니다.\n복구 전에 현재 데이터를 먼저 백업하는 것을 권장합니다.",
+            f"{len(records)}건의 회원 데이터를 복구할까요?\\n같은 회원의 기존 데이터는 백업 파일 내용으로 덮어씁니다.\\n복구 전에 현재 데이터는 자동으로 안전 백업됩니다.{legacy_note}",
             QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
         if answer!=QMessageBox.Yes: return
         self.data_status.setText("복구 전 현재 데이터를 안전 백업하는 중...")
