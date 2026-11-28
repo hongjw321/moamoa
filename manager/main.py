@@ -654,7 +654,39 @@ class Manager(QMainWindow):
         actions.addStretch(); l.addLayout(actions)
         self.admin_accounts_status=QLabel("최고 관리자 로그인 후 목록을 불러올 수 있습니다.")
         self.admin_accounts_status.setObjectName("muted"); l.addWidget(self.admin_accounts_status)
+        l.addWidget(QLabel("관리자 활동 내역"))
+        self.admin_activity_status=QLabel("관리자 로그인 및 관리자 작업 이력을 확인합니다. 최근 500건까지 표시됩니다.")
+        self.admin_activity_status.setObjectName("muted"); l.addWidget(self.admin_activity_status)
+        self.admin_activity_table=QTableWidget(0,5)
+        self.admin_activity_table.setHorizontalHeaderLabels(["발생 시각","관리자 이메일","권한","활동","상세 정보"])
+        self.admin_activity_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.admin_activity_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.admin_activity_table.setAlternatingRowColors(True)
+        self.admin_activity_table.setMaximumHeight(220)
+        l.addWidget(self.admin_activity_table)
+        l.addWidget(self.button("관리자 활동 내역 새로고침",self.load_admin_activity_logs,True))
         return w
+
+    def load_admin_activity_logs(self):
+        if not self.store.admin_session().get("access_token"):
+            self.admin_activity_status.setText("먼저 최고 관리자 계정으로 로그인해 주세요."); return
+        self.admin_activity_status.setText("관리자 활동 내역을 불러오는 중...")
+        def done(rows,error):
+            if error:
+                self.admin_activity_status.setText("조회 실패: "+error); return
+            self.admin_activity_table.setRowCount(len(rows))
+            for i,row in enumerate(rows):
+                details=row.get("details") or {}
+                detail_text=json.dumps(details,ensure_ascii=False)
+                vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),
+                      row.get("email") or details.get("actor_email") or "-",
+                      details.get("admin_role") or "-",
+                      row.get("action") or "-",
+                      detail_text[:500]]
+                for j,value in enumerate(vals):
+                    self.admin_activity_table.setItem(i,j,QTableWidgetItem(str(value)))
+            self.admin_activity_status.setText(f"관리자 활동 로그 {len(rows)}건 표시 · 최근 500건")
+        self.run_async(self.admin_users.list_admin_activity_logs,done)
 
     def load_admin_accounts(self):
         if not self.store.admin_session().get("access_token"):
