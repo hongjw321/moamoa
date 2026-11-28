@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
     };
 
     if (action === "get_admin_info") {
+      await audit("관리자 로그인");
       return reply({
         email: actorEmail,
         role: adminRole,
@@ -101,7 +102,7 @@ Deno.serve(async (req) => {
     }
 
     const superAdminOnlyActions = new Set([
-      "list_admin_accounts", "add_admin_account", "set_admin_active",
+      "list_admin_accounts", "list_admin_activity_logs", "add_admin_account", "set_admin_active",
       "update_profile", "ban_user", "unban_user", "list_data",
       "restore_data", "delete_user", "list_error_logs",
     ]);
@@ -115,6 +116,16 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: true });
       if (error) throw error;
       return reply({ admins: data || [] });
+    }
+
+    if (action === "list_admin_activity_logs") {
+      const { data, error } = await admin.from("member_activity_logs")
+        .select("id,email,action,details,created_at")
+        .contains("details", { actor: "admin" })
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      return reply({ logs: data || [] });
     }
 
     if (action === "add_admin_account") {
