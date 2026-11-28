@@ -1,4 +1,4 @@
-import json, os
+import json, os, hashlib
 from pathlib import Path
 import requests
 import keyring
@@ -34,8 +34,10 @@ class SettingsStore:
         from datetime import datetime, timezone
         stamp=datetime.now().strftime("%Y%m%d_%H%M%S")
         path=self.backup_dir()/f"MOAMOA_backup_{stamp}.json"
+        canonical=json.dumps(records,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
         backup={"format":"MOAMOA_DATA_BACKUP","version":1,
-                "created_at":datetime.now(timezone.utc).isoformat(),"records":records}
+                "created_at":datetime.now(timezone.utc).isoformat(),"records":records,
+                "sha256":hashlib.sha256(canonical).hexdigest()}
         path.write_text(json.dumps(backup,ensure_ascii=False,indent=2),encoding="utf-8")
         self.record_backup(path,len(records),label)
         return str(path)
