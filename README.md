@@ -26,9 +26,17 @@ GitHub Pages 기반의 캐릭터 수집 서비스 MVP입니다.
 - 뽑기는 현재 브라우저 JavaScript에서 실행됩니다. 브라우저 저장정보 삭제·조작으로 제한을 우회할 수 있으므로 유료 뽑기, 보상, 현금성 재화와 연결하면 안 됩니다.
 - 클라우드 동기화는 사용자 데이터 저장용 MVP입니다. 계정 전환 시 공유 기기에서 이전 사용자의 로컬 데이터가 섞이지 않도록 처리하며, 기존 비로그인 로컬 기록을 첫 로그인 계정으로 자동 가져오지 않습니다. 추첨 결과 검증, 거래 원장, 부정 이용 방지, 서버 권한 검증은 구현되지 않았습니다.
 - 샵은 상품 미리보기와 장바구니 데모입니다. 결제, 주문 생성, 재고, 배송, 환불 기능이 없습니다.
-- 회원 계정의 셀프 탈퇴/개인정보 삭제 기능은 아직 없습니다.
+- 마이페이지에 회원 탈퇴 UI를 추가했습니다. 서버 측 `delete-account` Edge Function을 배포하고 `SUPABASE_SERVICE_ROLE_KEY` secret을 설정해야 실제 탈퇴가 작동합니다. 이 함수는 호출자의 JWT를 검증한 뒤 해당 Auth 사용자를 삭제하며 `user_data.user_id`의 `ON DELETE CASCADE`로 연결 데이터도 삭제합니다.
 - `privacy.html`과 `terms.html`은 현재 기능에 맞춘 검토용 초안입니다. 대괄호의 운영자 정보·연락처·보유기간·시행일, Supabase 국외 이전 여부 등을 확정하고 법률 검토 후 사용해야 합니다.
 - 사업자 정보, 고객센터, 실제 판매 상품·가격·배송·교환/환불 정책이 준비되기 전에는 상품 판매를 시작하지 않습니다.
+
+## 회원 탈퇴 Edge Function 배포
+1. Supabase Dashboard에서 Edge Functions > Create function으로 `delete-account`를 생성합니다.
+2. 저장소의 `supabase/functions/delete-account/index.ts` 내용을 함수 편집기에 붙여 넣고 Deploy 합니다.
+3. Edge Function Secrets에서 `SUPABASE_SERVICE_ROLE_KEY`를 프로젝트의 service_role secret으로 설정합니다. 이 키는 GitHub 저장소나 브라우저 코드에 절대 넣지 않습니다.
+4. 함수의 JWT verification을 활성화한 상태로 유지합니다.
+5. 실제 테스트 계정으로 탈퇴를 실행하고 Supabase Authentication > Users 및 `user_data`에서 계정과 데이터가 삭제되는지 확인합니다.
+6. 함수가 배포되기 전에는 마이페이지 탈퇴 버튼이 실패하며, 이 상태로 운영 공개하지 않습니다.
 
 ## 개인정보 및 보안
 - `supabase-config.js`의 publishable key는 브라우저 공개용입니다. secret/service_role key를 프론트엔드에 넣지 마세요.
