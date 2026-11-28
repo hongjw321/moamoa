@@ -85,12 +85,14 @@ class AdminUsersService:
             raise RuntimeError(data.get("error") or f"관리자 API 오류 HTTP {r.status_code}")
         return data
     def list_users_page(self,page=1,per_page=100,search=""):
-        data=self.request({"action":"list","page":int(page),"perPage":int(per_page)})
-        users=data.get("users",[])
-        q=search.strip().lower()
+        q=search.strip()
         if q:
-            users=[u for u in users if q in (u.get("email","")+" "+u.get("user_metadata",{}).get("full_name","")+" "+u.get("user_metadata",{}).get("nickname","")+" "+u.get("user_metadata",{}).get("phone","")).lower()]
-        return {"users":users,"page":data.get("page",page),"per_page":data.get("perPage",per_page),"total":data.get("total")}
+            data=self.request({"action":"search","query":q,"page":int(page),"perPage":int(per_page)})
+        else:
+            data=self.request({"action":"list","page":int(page),"perPage":int(per_page)})
+        return {"users":data.get("users",[]),"page":data.get("page",page),
+                "per_page":data.get("perPage",per_page),"total":data.get("total"),
+                "search_limited":data.get("search_limited",False)}
     def list_users(self,search=""):
         return self.list_users_page(1,100,search).get("users",[])
     def list_all_users(self):
@@ -115,6 +117,9 @@ class AdminUsersService:
         return self.request({"action":"ban_user","user_id":user_id,"duration":duration})
     def unban_user(self,user_id):
         return self.request({"action":"unban_user","user_id":user_id})
+    def batch_member_action(self,user_ids,operation,duration="24h"):
+        return self.request({"action":"batch_member_action","user_ids":user_ids,
+                             "operation":operation,"duration":duration})
     def list_data(self):
         data=self.request({"action":"list_data"})
         return data.get("records",[])
