@@ -334,6 +334,7 @@ class Manager(QMainWindow):
         self.member_search.returnPressed.connect(self.load_members)
         tools.addWidget(self.member_search,1)
         tools.addWidget(self.button("검색 및 새로고침",self.load_members,True))
+        tools.addWidget(self.button("회원 CSV 내보내기",self.export_members_csv))
         tools.addWidget(self.button("회원 정보 수정",self.edit_member))
         tools.addWidget(self.button("회원 삭제",self.delete_member))
         tools.addWidget(self.button("회원 차단",self.ban_member))
@@ -413,6 +414,30 @@ class Manager(QMainWindow):
             self.member_status.setText(f"회원 {len(users)}명 표시 중 (최대 100명 조회). 인증 여부와 현재 차단 상태를 확인할 수 있습니다.")
             self.log_line(f"회원 목록 {len(users)}명 조회")
         self.run_async(lambda:self.admin_users.list_users(query),done)
+    def export_members_csv(self):
+        if self.members_table.rowCount()==0:
+            QMessageBox.information(self,"내보낼 회원 없음","먼저 회원 목록을 조회해 주세요.")
+            return
+        path,_=QFileDialog.getSaveFileName(self,"회원 목록 CSV 저장","MOAMOA_회원목록.csv","CSV 파일 (*.csv)")
+        if not path:
+            return
+        if not path.lower().endswith(".csv"):
+            path += ".csv"
+        try:
+            with open(path,"w",newline="",encoding="utf-8-sig") as file:
+                writer=csv.writer(file)
+                writer.writerow(["이메일","이름","닉네임","휴대폰","이메일 인증","계정 상태","가입일","최근 로그인"])
+                for row in range(self.members_table.rowCount()):
+                    writer.writerow([
+                        self.members_table.item(row,col).text() if self.members_table.item(row,col) else ""
+                        for col in range(self.members_table.columnCount())
+                    ])
+            self.member_status.setText(f"회원 목록 CSV 저장 완료 · {self.members_table.rowCount()}명")
+            QMessageBox.information(self,"내보내기 완료",f"회원 {self.members_table.rowCount()}명의 목록을 저장했습니다.\\n{path}")
+            self.log_line(f"회원 목록 CSV 내보내기 완료 · {self.members_table.rowCount()}명")
+        except Exception as exc:
+            QMessageBox.warning(self,"내보내기 실패",str(exc))
+
     def selected_member(self):
         row=self.members_table.currentRow()
         if row<0: return None
