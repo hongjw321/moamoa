@@ -241,6 +241,7 @@ class Manager(QMainWindow):
         for card in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
                      self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart):
             card.set_value("조회 중...")
+        self.refresh_activity_analytics()
         def work():
             users=self.admin_users.list_users("")
             records=self.admin_users.list_data()
