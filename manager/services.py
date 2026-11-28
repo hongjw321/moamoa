@@ -42,7 +42,9 @@ class GitHubService:
         token=self.store.github_token()
         headers={"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}
         if token: headers["Authorization"]="Bearer "+token
-        r=requests.get("https://api.github.com/repos/"+repo+"/"+path,headers=headers,timeout=15)
+        endpoint="https://api.github.com/repos/"+repo
+        if path: endpoint+="/"+path.lstrip("/")
+        r=requests.get(endpoint,headers=headers,timeout=15)
         if r.status_code>=400: raise RuntimeError(f"GitHub API 오류 HTTP {r.status_code}: {r.text[:240]}")
         return r.json()
     def repo_info(self): return self._get("")
