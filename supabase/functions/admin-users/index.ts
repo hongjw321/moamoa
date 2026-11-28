@@ -1,6 +1,6 @@
 // MOAMOA administrator API.
-// Required Edge Function secrets: SUPABASE_URL, SUPABASE_ANON_KEY,
-// SUPABASE_SERVICE_ROLE_KEY, MOAMOA_ADMIN_EMAILS (comma-separated exact email allowlist).
+// Required custom Edge Function secret: MOAMOA_ADMIN_EMAILS (comma-separated exact email allowlist).
+// Supabase project keys are read from current key dictionaries, with legacy fallbacks.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -22,8 +22,10 @@ Deno.serve(async (req) => {
     if (!authHeader.startsWith("Bearer ")) return reply({ error: "로그인이 필요합니다." }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const publishableKeys = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "{}");
+    const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
+    const anonKey = publishableKeys.default || Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceRoleKey = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const allowlist = (Deno.env.get("MOAMOA_ADMIN_EMAILS") || "")
       .split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
     if (!supabaseUrl || !anonKey || !serviceRoleKey || allowlist.length === 0) {
