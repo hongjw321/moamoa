@@ -225,6 +225,7 @@ class Manager(QMainWindow):
         authrow.addWidget(self.button("로그아웃",self.admin_logout))
         authrow.addStretch(); form.addRow(authrow); l.addWidget(auth)
         self.member_status=QLabel("관리자 로그인 후 회원 목록을 불러올 수 있습니다."); self.member_status.setObjectName("muted"); l.addWidget(self.member_status)
+        self.admin_role_status=QLabel("권한: 로그인 필요"); self.admin_role_status.setObjectName("muted"); l.addWidget(self.admin_role_status)
         tools=QHBoxLayout()
         self.member_search=QLineEdit(); self.member_search.setPlaceholderText("이메일 / 이름 / 닉네임 검색")
         self.member_search.returnPressed.connect(self.load_members)
@@ -251,21 +252,30 @@ class Manager(QMainWindow):
             QMessageBox.warning(self,"입력 확인","관리자 이메일과 비밀번호를 입력해 주세요."); return
         self.member_status.setText("로그인 확인 중...")
         def work():
-            user=self.supabase.admin_login(email,password,self.store)
-            return self.admin_users.request({"action":"list","page":1,"perPage":1})
+            self.supabase.admin_login(email,password,self.store)
+            info=self.admin_users.get_admin_info()
+            self.admin_users.request({"action":"list","page":1,"perPage":1})
+            return info
         def done(result,error):
             self.admin_password.clear()
             if error:
-                self.store.clear_admin_session(); self.member_status.setText("로그인 실패: "+error); return
+                self.store.clear_admin_session(); self.member_status.setText("로그인 실패: "+error)
+                self.admin_role_status.setText("권한: 확인 실패")
+                return
+            role=result.get("role","admin")
+            role_label="최고 관리자" if role=="super_admin" else "일반 관리자"
             self.member_status.setText("관리자 인증 완료 · "+email)
-            self.log_line("관리자 인증 완료")
+            self.admin_role_status.setText(f"권한: {role_label} · 서버에서 권한을 검증합니다.")
+            self.log_line("관리자 인증 완료 · "+role_label)
             self.load_members()
             self.refresh_dashboard_stats()
         self.run_async(work,done)
         self.admin_password.clear()
     def admin_logout(self):
         self.store.clear_admin_session(); self.members_table.setRowCount(0)
-        self.member_status.setText("로그아웃했습니다."); self.log_line("관리자 로그아웃")
+        self.member_status.setText("로그아웃했습니다.")
+        self.admin_role_status.setText("권한: 로그인 필요")
+        self.log_line("관리자 로그아웃")
     def load_members(self):
         session=self.store.admin_session()
         if not session.get("access_token"):
