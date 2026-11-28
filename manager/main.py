@@ -85,7 +85,30 @@ class Manager(QMainWindow):
         self.sup_card=Card("SUPABASE 연결"); self.gh_card=Card("GITHUB 저장소"); self.pages_card=Card("최근 배포")
         for c in (self.sup_card,self.gh_card,self.pages_card): row.addWidget(c)
         l.addLayout(row)
-        l.addWidget(self.button("전체 연결 상태 확인",self.refresh_dashboard,True))
+        l.addWidget(self.title_block("서비스 통계","회원 및 서비스 데이터 기준 · 관리자 로그인 필요"))
+        stats1=QHBoxLayout()
+        self.stat_users=Card("전체 가입 회원","-","최대 100명 조회 기준")
+        self.stat_today=Card("오늘 신규 가입","-","조회된 회원 기준")
+        self.stat_verified=Card("이메일 인증 완료","-","조회된 회원 기준")
+        self.stat_banned=Card("현재 차단 회원","-","조회된 회원 기준")
+        for c in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned): stats1.addWidget(c)
+        l.addLayout(stats1)
+        stats2=QHBoxLayout()
+        self.stat_owned=Card("보유 캐릭터 합계","-","user_data 최대 500건 기준")
+        self.stat_draws=Card("뽑기 기록 합계","-","user_data 최대 500건 기준")
+        self.stat_attendance=Card("출석 기록 합계","-","user_data 최대 500건 기준")
+        self.stat_cart=Card("장바구니 항목 합계","-","user_data 최대 500건 기준")
+        for c in (self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart): stats2.addWidget(c)
+        l.addLayout(stats2)
+        l.addWidget(self.button("회원·서비스 통계 새로고침",self.refresh_dashboard_stats,True))
+        l.addWidget(QLabel("최근 가입 회원"))
+        self.recent_members=QTableWidget(0,4)
+        self.recent_members.setHorizontalHeaderLabels(["이메일","이름","닉네임","가입일"])
+        self.recent_members.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.recent_members.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.recent_members.setMaximumHeight(190)
+        l.addWidget(self.recent_members)
+        l.addWidget(self.button("전체 연결 상태 확인",self.refresh_dashboard))
         l.addWidget(QLabel("최근 작업")); l.addWidget(self.log)
         l.addStretch(); return w
     def refresh_dashboard(self):
@@ -106,6 +129,67 @@ class Manager(QMainWindow):
             else: self.pages_card.set_value("기록 없음","Actions 실행 내역 없음")
             self.log_line("GitHub 저장소 연결 확인 완료")
         self.run_async(gh,done)
+        self.refresh_dashboard_stats()
+    def refresh_dashboard_stats(self):
+        session=self.store.admin_session()
+        if not session.get("access_token"):
+            for card in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
+                         self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart):
+                card.set_value("로그인 필요","회원 관리에서 관리자 로그인")
+            self.recent_members.setRowCount(0)
+            return
+        for card in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
+                     self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart):
+            card.set_value("조회 중...")
+        def work():
+            users=self.admin_users.list_users("")
+            records=self.admin_users.list_data()
+            return users,records
+        def done(result,error):
+            if error:
+                for card in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
+                             self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart):
+                    card.set_value("조회 실패",error)
+                self.log_line("대시보드 통계 조회 실패: "+error)
+                return
+            users,records=result
+            today=datetime.now().date()
+            today_count=0; verified=0; banned=0
+            for u in users:
+                created=u.get("created_at") or ""
+                try:
+                    if datetime.fromisoformat(created.replace("Z","+00:00")).astimezone().date()==today:
+                        today_count+=1
+                except Exception: pass
+                if u.get("email_confirmed_at"): verified+=1
+                until=u.get("banned_until") or ""
+                try:
+                    expiry=datetime.fromisoformat(until.replace("Z","+00:00"))
+                    if expiry.tzinfo is None: expiry=expiry.replace(tzinfo=timezone.utc)
+                    if expiry>datetime.now(timezone.utc): banned+=1
+                except Exception: pass
+            self.stat_users.set_value(f"{len(users):,}명","최대 100명 조회 기준")
+            self.stat_today.set_value(f"{today_count:,}명","오늘 가입 · 조회된 회원 기준")
+            self.stat_verified.set_value(f"{verified:,}명","조회된 회원 기준")
+            self.stat_banned.set_value(f"{banned:,}명","현재 차단 중 · 조회된 회원 기준")
+            totals={"owned":0,"history":0,"attendance":0,"cart":0}
+            for record in records:
+                payload=record.get("payload") or {}
+                for key in totals:
+                    value=payload.get(key) or []
+                    if isinstance(value,list): totals[key]+=len(value)
+            self.stat_owned.set_value(f"{totals['owned']:,}개","최대 500건 조회 기준")
+            self.stat_draws.set_value(f"{totals['history']:,}건","최대 500건 조회 기준")
+            self.stat_attendance.set_value(f"{totals['attendance']:,}건","최대 500건 조회 기준")
+            self.stat_cart.set_value(f"{totals['cart']:,}개","최대 500건 조회 기준")
+            recent=sorted(users,key=lambda u:u.get("created_at") or "",reverse=True)[:5]
+            self.recent_members.setRowCount(len(recent))
+            for i,u in enumerate(recent):
+                meta=u.get("user_metadata") or {}
+                vals=[u.get("email",""),meta.get("full_name",""),meta.get("nickname",""),(u.get("created_at") or "-")[:10]]
+                for j,value in enumerate(vals): self.recent_members.setItem(i,j,QTableWidgetItem(str(value)))
+            self.log_line(f"대시보드 통계 갱신 완료 · 회원 {len(users)}명 / 데이터 {len(records)}건")
+        self.run_async(work,done)
     def members_page(self):
         w=QWidget(); l=QVBoxLayout(w)
         l.addWidget(self.title_block("회원 관리","관리자 계정으로 인증한 뒤 실제 Supabase 회원 정보를 조회하고 관리합니다."))
@@ -155,6 +239,7 @@ class Manager(QMainWindow):
             self.member_status.setText("관리자 인증 완료 · "+email)
             self.log_line("관리자 인증 완료")
             self.load_members()
+            self.refresh_dashboard_stats()
         self.run_async(work,done)
         self.admin_password.clear()
     def admin_logout(self):
