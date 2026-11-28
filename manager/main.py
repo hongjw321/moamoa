@@ -1480,7 +1480,7 @@ class Manager(QMainWindow):
             QMessageBox.warning(self,"변경 불가","최고 관리자 권한은 여기서 변경할 수 없습니다."); return
         available={"members_read":"회원 목록 조회","members_edit":"회원 정보 수정","members_ban":"회원 차단 및 해제",
             "members_delete":"회원 계정 삭제","data_read":"회원 데이터 조회 및 백업","data_restore":"회원 데이터 복구",
-            "announcements_manage":"공지사항 관리","activity_logs_read":"회원 활동 로그 조회","error_logs_read":"오류 로그 조회"}
+            "announcements_manage":"공지사항 관리","activity_logs_read":"회원 활동 로그 조회","error_logs_read":"오류 로그 조회","security_logs_read":"중앙 보안 기록 조회"}
         current=account.get("capabilities") or ["members_read","announcements_manage","activity_logs_read"]
         current_text=", ".join(key for key in available if key in current)
         value,ok=QInputDialog.getMultiLineText(self,"일반 관리자 권한 설정",
