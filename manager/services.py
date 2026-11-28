@@ -10,6 +10,35 @@ def config_path():
     return base/"settings.json"
 
 class SettingsStore:
+    def backup_dir(self):
+        folder=config_path().parent/"Backups"
+        folder.mkdir(parents=True,exist_ok=True)
+        return folder
+    def load_backup_history(self):
+        path=config_path().parent/"backup-history.json"
+        try:
+            data=json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data,list) else []
+        except Exception:
+            return []
+    def record_backup(self,path,record_count,label="수동 백업"):
+        from datetime import datetime
+        history=self.load_backup_history()
+        history.insert(0,{"path":str(path),"record_count":int(record_count),
+                          "label":str(label),"created_at":datetime.now().astimezone().isoformat()})
+        history=history[:100]
+        (config_path().parent/"backup-history.json").write_text(
+            json.dumps(history,ensure_ascii=False,indent=2),encoding="utf-8")
+        return history
+    def create_local_backup(self,records,label="자동 안전 백업"):
+        from datetime import datetime, timezone
+        stamp=datetime.now().strftime("%Y%m%d_%H%M%S")
+        path=self.backup_dir()/f"MOAMOA_backup_{stamp}.json"
+        backup={"format":"MOAMOA_DATA_BACKUP","version":1,
+                "created_at":datetime.now(timezone.utc).isoformat(),"records":records}
+        path.write_text(json.dumps(backup,ensure_ascii=False,indent=2),encoding="utf-8")
+        self.record_backup(path,len(records),label)
+        return str(path)
     def load(self):
         p=config_path()
         if p.exists():
@@ -134,6 +163,9 @@ class AdminUsersService:
         return self.request({"action":"delete_announcement","id":announcement_id})
     def list_activity_logs(self):
         return self.request({"action":"list_activity_logs"}).get("logs",[])
+    def list_activity_analytics(self,days=365):
+        data=self.request({"action":"list_activity_logs","days":int(days),"analytics":True})
+        return data.get("logs",[])
     def list_error_logs(self):
         return self.request({"action":"list_error_logs"}).get("logs",[])
     def list_admin_accounts(self):
