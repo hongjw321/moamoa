@@ -62,6 +62,21 @@ class SettingsStore:
             return {"access_token":keyring.get_password(APP_NAME,"admin_access_token"),
                     "email":keyring.get_password(APP_NAME,"admin_email")}
         except Exception: return {"access_token":None,"email":None}
+    def load_security_events(self):
+        path=config_path().parent/"security-events.json"
+        try:
+            data=json.loads(path.read_text(encoding="utf-8"))
+            return data if isinstance(data,list) else []
+        except Exception: return []
+    def record_security_event(self,email,result,reason=""):
+        from datetime import datetime
+        rows=self.load_security_events()
+        rows.insert(0,{"created_at":datetime.now().astimezone().isoformat(),
+                       "email":str(email or "")[:254],"result":str(result)[:20],
+                       "reason":str(reason or "")[:300]})
+        path=config_path().parent/"security-events.json"
+        path.write_text(json.dumps(rows[:300],ensure_ascii=False,indent=2),encoding="utf-8")
+        return rows[:300]
     def clear_admin_session(self):
         for key in ("admin_access_token","admin_email"):
             try: keyring.delete_password(APP_NAME,key)
@@ -176,6 +191,8 @@ class AdminUsersService:
         return self.request({"action":"list_admin_activity_logs"}).get("logs",[])
     def add_admin_account(self,email):
         return self.request({"action":"add_admin_account","email":email})
+    def set_admin_capabilities(self,email,capabilities):
+        return self.request({"action":"set_admin_capabilities","email":email,"capabilities":capabilities})
     def set_admin_active(self,email,is_active):
         return self.request({"action":"set_admin_active","email":email,"is_active":is_active})
     def report_error(self,source,message):
