@@ -1,5 +1,6 @@
 import sys
 import json
+import csv
 from datetime import datetime, timezone
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
@@ -657,6 +658,13 @@ class Manager(QMainWindow):
         l.addWidget(QLabel("관리자 활동 내역"))
         self.admin_activity_status=QLabel("관리자 로그인 및 관리자 작업 이력을 확인합니다. 최근 500건까지 표시됩니다.")
         self.admin_activity_status.setObjectName("muted"); l.addWidget(self.admin_activity_status)
+        activity_tools=QHBoxLayout()
+        self.admin_activity_search=QLineEdit()
+        self.admin_activity_search.setPlaceholderText("관리자 이메일 또는 활동 내용 검색")
+        self.admin_activity_search.textChanged.connect(self.filter_admin_activity_logs)
+        activity_tools.addWidget(self.admin_activity_search,1)
+        activity_tools.addWidget(self.button("CSV 내보내기",self.export_admin_activity_logs))
+        l.addLayout(activity_tools)
         self.admin_activity_table=QTableWidget(0,5)
         self.admin_activity_table.setHorizontalHeaderLabels(["발생 시각","관리자 이메일","권한","활동","상세 정보"])
         self.admin_activity_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -674,19 +682,67 @@ class Manager(QMainWindow):
         def done(rows,error):
             if error:
                 self.admin_activity_status.setText("조회 실패: "+error); return
-            self.admin_activity_table.setRowCount(len(rows))
-            for i,row in enumerate(rows):
-                details=row.get("details") or {}
-                detail_text=json.dumps(details,ensure_ascii=False)
-                vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),
-                      row.get("email") or details.get("actor_email") or "-",
-                      details.get("admin_role") or "-",
-                      row.get("action") or "-",
-                      detail_text[:500]]
-                for j,value in enumerate(vals):
-                    self.admin_activity_table.setItem(i,j,QTableWidgetItem(str(value)))
-            self.admin_activity_status.setText(f"관리자 활동 로그 {len(rows)}건 표시 · 최근 500건")
+            self._admin_activity_rows=rows or []
+            self.filter_admin_activity_logs()
         self.run_async(self.admin_users.list_admin_activity_logs,done)
+
+    def filtered_admin_activity_rows(self):
+        rows=getattr(self,"_admin_activity_rows",[])
+        query=self.admin_activity_search.text().strip().lower() if hasattr(self,"admin_activity_search") else ""
+        if not query: return rows
+        matched=[]
+        for row in rows:
+            details=row.get("details") or {}
+            searchable=" ".join([
+                str(row.get("email") or details.get("actor_email") or ""),
+                str(row.get("action") or ""),
+                str(details.get("admin_role") or ""),
+                json.dumps(details,ensure_ascii=False)
+            ]).lower()
+            if query in searchable: matched.append(row)
+        return matched
+
+    def filter_admin_activity_logs(self):
+        rows=self.filtered_admin_activity_rows()
+        self.admin_activity_table.setRowCount(len(rows))
+        for i,row in enumerate(rows):
+            details=row.get("details") or {}
+            detail_text=json.dumps(details,ensure_ascii=False)
+            vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),
+                  row.get("email") or details.get("actor_email") or "-",
+                  details.get("admin_role") or "-",
+                  row.get("action") or "-",
+                  detail_text[:500]]
+            for j,value in enumerate(vals):
+                self.admin_activity_table.setItem(i,j,QTableWidgetItem(str(value)))
+        total=len(getattr(self,"_admin_activity_rows",[]))
+        self.admin_activity_status.setText(f"검색 결과 {len(rows)}건 / 전체 {total}건 · 최근 최대 500건")
+
+    def export_admin_activity_logs(self):
+        rows=self.filtered_admin_activity_rows()
+        if not rows:
+            QMessageBox.information(self,"내보낼 기록 없음","먼저 관리자 활동 내역을 새로고침하거나 검색 조건을 확인해 주세요.")
+            return
+        path,_=QFileDialog.getSaveFileName(self,"관리자 활동 내역 CSV 저장","moamoa-admin-activity.csv","CSV 파일 (*.csv)")
+        if not path: return
+        if not path.lower().endswith(".csv"): path += ".csv"
+        try:
+            with open(path,"w",newline="",encoding="utf-8-sig") as f:
+                writer=csv.writer(f)
+                writer.writerow(["발생 시각","관리자 이메일","권한","활동","상세 정보"])
+                for row in rows:
+                    details=row.get("details") or {}
+                    writer.writerow([
+                        row.get("created_at") or "",
+                        row.get("email") or details.get("actor_email") or "",
+                        details.get("admin_role") or "",
+                        row.get("action") or "",
+                        json.dumps(details,ensure_ascii=False)
+                    ])
+            self.admin_activity_status.setText(f"CSV 저장 완료 · {len(rows)}건")
+            QMessageBox.information(self,"내보내기 완료",f"관리자 활동 내역 {len(rows)}건을 저장했습니다.\n{path}")
+        except Exception as exc:
+            QMessageBox.warning(self,"내보내기 실패",str(exc))
 
     def load_admin_accounts(self):
         if not self.store.admin_session().get("access_token"):
