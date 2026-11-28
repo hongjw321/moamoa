@@ -48,6 +48,7 @@ class Manager(QMainWindow):
         self.resize(1180, 760); self.setMinimumSize(680, 500)
         self.store=SettingsStore(); self.cfg=self.store.load()
         self.github=GitHubService(self.store); self.supabase=SupabaseService(self.cfg); self.admin_users=AdminUsersService(self.cfg,self.store)
+        self.admin_info={}
         self.workers=[]
         # Create shared widgets before page builders reference them.
         self.log=QTextEdit(); self.log.setReadOnly(True); self.log.setMaximumHeight(95)
@@ -72,6 +73,7 @@ class Manager(QMainWindow):
         self.status=QLabel("설정에서 Supabase와 GitHub를 연결해 주세요."); self.status.setObjectName("muted"); self.status.setWordWrap(True); cl.addWidget(self.status)
         self.global_role_status=QLabel("권한: 로그인 필요"); self.global_role_status.setObjectName("roleStatus"); self.global_role_status.setWordWrap(True); cl.addWidget(self.global_role_status)
         cl.addSpacing(16); cl.addWidget(self.stack); outer.addWidget(content,1)
+        self.apply_admin_permissions({})
         self.go(0); self.refresh_dashboard()
         self.check_for_updates(silent=True)
 
@@ -84,6 +86,48 @@ class Manager(QMainWindow):
     def go(self, i):
         self.stack.setCurrentIndex(i); self.header.setText(["대시보드","회원 관리","데이터 관리","운영 관리","관리자 계정","GitHub 배포","환경 설정"][i])
         for n,(b,_) in enumerate(self.pages): b.setChecked(n==i)
+    def apply_admin_permissions(self, info=None):
+        """Apply server-returned capabilities to navigation and page controls.
+        Server-side Edge Function checks remain the security boundary.
+        """
+        if info is not None:
+            self.admin_info = dict(info or {})
+        info = getattr(self, "admin_info", {}) or {}
+        role = info.get("role", "")
+        caps = set(info.get("capabilities") or [])
+        if role == "super_admin":
+            caps.update({"members_read", "members_edit", "members_ban", "members_delete",
+                         "data_read", "data_restore", "announcements_manage",
+                         "activity_logs_read", "error_logs_read", "admins_manage"})
+        self.admin_capabilities = caps
+        if hasattr(self, "pages"):
+            # Keep 회원 관리 visible so an administrator can always sign in/out.
+            self.pages[1][0].setVisible(True)
+            self.pages[2][0].setVisible(bool(caps.intersection({"data_read", "data_restore"})))
+            self.pages[3][0].setVisible(bool(caps.intersection({
+                "announcements_manage", "activity_logs_read", "error_logs_read"
+            })) or bool(info))
+            self.pages[4][0].setVisible("admins_manage" in caps)
+        controls = getattr(self, "_permission_controls", {})
+        for name, capability in controls.items():
+            widget = controls[name]
+            widget.setVisible(capability in caps)
+        if hasattr(self, "ops_tabs"):
+            tab_caps = ["announcements_manage", "activity_logs_read", "error_logs_read", None]
+            for index, capability in enumerate(tab_caps):
+                self.ops_tabs.setTabVisible(index, capability is None or capability in caps)
+        if hasattr(self, "data_tools"):
+            allowed = "data_read" in caps or "data_restore" in caps
+            self.data_tools.setVisible(allowed)
+        if hasattr(self, "admin_role_status"):
+            if info:
+                label = "최고 관리자" if role == "super_admin" else "일반 관리자"
+                self.admin_role_status.setText(f"권한: {label} · 메뉴는 부여된 권한에 따라 표시됩니다.")
+                self.global_role_status.setText(f"권한: {label} · 서버 검증")
+            else:
+                self.admin_role_status.setText("권한: 로그인 필요")
+                self.global_role_status.setText("권한: 로그인 필요")
+
     def run_async(self, fn, callback):
         w=Worker(fn); self.workers.append(w)
         def completed(result,error):
@@ -199,6 +243,13 @@ class Manager(QMainWindow):
             self.analytics_signups.set_value("로그인 필요")
             self.analytics_logins.set_value("로그인 필요")
             self.analytics_table.setRowCount(0)
+            return
+        if "activity_logs_read" not in getattr(self, "admin_capabilities", set()):
+            self.analytics_total.set_value("권한 없음", "활동 로그 조회 권한이 필요합니다.")
+            self.analytics_signups.set_value("권한 없음")
+            self.analytics_logins.set_value("권한 없음")
+            self.analytics_table.setRowCount(0)
+            self.analytics_chart.setRowCount(0)
             return
         self.analytics_total.set_value("조회 중...")
         self.analytics_signups.set_value("조회 중...")
@@ -343,6 +394,13 @@ class Manager(QMainWindow):
                 card.set_value("로그인 필요","회원 관리에서 관리자 로그인")
             self.recent_members.setRowCount(0)
             return
+        caps = getattr(self, "admin_capabilities", set())
+        if not {"members_read", "data_read"}.issubset(caps):
+            for card in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
+                         self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart):
+                card.set_value("권한 제한", "회원 조회 및 데이터 조회 권한이 모두 필요합니다.")
+            self.recent_members.setRowCount(0)
+            return
         for card in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
                      self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart):
             card.set_value("조회 중...")
@@ -415,18 +473,29 @@ class Manager(QMainWindow):
         self.member_search=QLineEdit(); self.member_search.setPlaceholderText("이메일 / 이름 / 닉네임 검색")
         self.member_search.returnPressed.connect(self.load_members)
         tools.addWidget(self.member_search,1)
-        tools.addWidget(self.button("검색 및 새로고침",self.load_members,True))
-        tools.addWidget(self.button("현재 페이지 CSV",self.export_members_csv))
-        tools.addWidget(self.button("전체 회원 CSV",self.export_all_members_csv))
-        tools.addWidget(self.button("회원 정보 수정",self.edit_member))
-        tools.addWidget(self.button("회원 삭제",self.delete_member))
-        tools.addWidget(self.button("회원 차단",self.ban_member))
-        tools.addWidget(self.button("차단 해제",self.unban_member))
+        self._permission_controls = {}
+        member_buttons = [("members_read","검색 및 새로고침",self.load_members,True),
+            ("members_read","현재 페이지 CSV",self.export_members_csv,False),
+            ("members_read","전체 회원 CSV",self.export_all_members_csv,False),
+            ("members_edit","회원 정보 수정",self.edit_member,False),
+            ("members_delete","회원 삭제",self.delete_member,False),
+            ("members_ban","회원 차단",self.ban_member,False),
+            ("members_ban","차단 해제",self.unban_member,False)]
+        for capability, label, callback, primary in member_buttons:
+            button = self.button(label, callback, primary)
+            self._permission_controls[label] = button
+            tools.addWidget(button)
         l.addLayout(tools)
         member_actions=QHBoxLayout()
-        member_actions.addWidget(self.button("선택 회원 일괄 차단",self.batch_ban_members))
-        member_actions.addWidget(self.button("선택 회원 일괄 해제",self.batch_unban_members))
-        member_actions.addWidget(self.button("회원 상세 보기",self.show_member_detail))
+        batch_ban = self.button("선택 회원 일괄 차단",self.batch_ban_members)
+        batch_unban = self.button("선택 회원 일괄 해제",self.batch_unban_members)
+        detail_button = self.button("회원 상세 보기",self.show_member_detail)
+        self._permission_controls["선택 회원 일괄 차단"] = batch_ban
+        self._permission_controls["선택 회원 일괄 해제"] = batch_unban
+        self._permission_controls["회원 상세 보기"] = detail_button
+        member_actions.addWidget(batch_ban)
+        member_actions.addWidget(batch_unban)
+        member_actions.addWidget(detail_button)
         member_actions.addWidget(QLabel("상태 필터"))
         self.member_status_filter=QComboBox()
         self.member_status_filter.addItem("전체 상태","all")
@@ -476,6 +545,7 @@ class Manager(QMainWindow):
                 self.global_role_status.setText("권한: 확인 실패")
                 return
             self.store.record_security_event(email,"성공","관리자 인증 완료")
+            self.apply_admin_permissions(result)
             role=result.get("role","admin")
             role_label="최고 관리자" if role=="super_admin" else "일반 관리자"
             self.member_status.setText("관리자 인증 완료 · "+email)
@@ -488,6 +558,7 @@ class Manager(QMainWindow):
         self.admin_password.clear()
     def admin_logout(self):
         self.store.clear_admin_session(); self.members_table.setRowCount(0)
+        self.apply_admin_permissions({})
         self.member_status.setText("로그아웃했습니다.")
         self.admin_role_status.setText("권한: 로그인 필요")
         self.global_role_status.setText("권한: 로그인 필요")
@@ -822,11 +893,16 @@ class Manager(QMainWindow):
         self.data_status=QLabel("관리자 로그인 후 데이터 목록을 불러올 수 있습니다.")
         self.data_status.setObjectName("muted"); l.addWidget(self.data_status)
         tools=QHBoxLayout()
-        tools.addWidget(self.button("데이터 새로고침",self.load_data,True))
-        tools.addWidget(self.button("선택 회원 백업",lambda:self.export_data(True)))
-        tools.addWidget(self.button("전체 데이터 백업",lambda:self.export_data(False)))
-        tools.addWidget(self.button("백업 파일 복구",self.import_data))
-        l.addLayout(tools)
+        self.data_tools = QWidget(); self.data_tools.setLayout(tools)
+        self.data_refresh_button = self.button("데이터 새로고침",self.load_data,True)
+        self.data_export_selected_button = self.button("선택 회원 백업",lambda:self.export_data(True))
+        self.data_export_all_button = self.button("전체 데이터 백업",lambda:self.export_data(False))
+        self.data_restore_button = self.button("백업 파일 복구",self.import_data)
+        tools.addWidget(self.data_refresh_button)
+        tools.addWidget(self.data_export_selected_button)
+        tools.addWidget(self.data_export_all_button)
+        tools.addWidget(self.data_restore_button)
+        l.addWidget(self.data_tools)
         self.data_table=QTableWidget(0,7)
         self.data_table.setHorizontalHeaderLabels(["회원 ID","사용 여부","보유 캐릭터","뽑기 기록","출석 기록","장바구니","최근 수정"])
         self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -1056,6 +1132,7 @@ class Manager(QMainWindow):
         sl.addWidget(self.button("보안 기록 새로고침",self.load_security_events,True))
         self.ops_tabs.addTab(security,"보안 모니터링")
         outer.addWidget(self.ops_tabs,1)
+        self.apply_admin_permissions(getattr(self, "admin_info", {}))
         self._announcements=[]
         return w
     def require_ops_login(self,label):
