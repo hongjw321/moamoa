@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timezone
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -126,8 +127,8 @@ class Manager(QMainWindow):
         tools.addWidget(self.button("회원 정보 수정",self.edit_member))
         tools.addWidget(self.button("회원 삭제",self.delete_member))
         l.addLayout(tools)
-        self.members_table=QTableWidget(0,6)
-        self.members_table.setHorizontalHeaderLabels(["이메일","이름","닉네임","휴대폰","가입일","최근 로그인"])
+        self.members_table=QTableWidget(0,8)
+        self.members_table.setHorizontalHeaderLabels(["이메일","이름","닉네임","휴대폰","이메일 인증","계정 상태","가입일","최근 로그인"])
         self.members_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self._member_map={}
         self.members_table.setSelectionBehavior(QTableWidget.SelectRows)
@@ -169,12 +170,22 @@ class Manager(QMainWindow):
             self._member_map={u.get('id'):u for u in users}
             for i,u in enumerate(users):
                 meta=u.get("user_metadata") or {}
-                vals=[u.get("email",""),meta.get("full_name",""),meta.get("nickname",""),meta.get("phone",""),u.get("created_at","")[:10],(u.get("last_sign_in_at") or "-")[:10]]
+                confirmed=bool(u.get("email_confirmed_at") or u.get("confirmed_at"))
+                banned_until=u.get("banned_until")
+                account_status="정상"
+                if banned_until:
+                    try:
+                        expiry=datetime.fromisoformat(str(banned_until).replace("Z","+00:00"))
+                        if expiry.tzinfo is None: expiry=expiry.replace(tzinfo=timezone.utc)
+                        if expiry > datetime.now(timezone.utc): account_status="차단 중"
+                    except Exception:
+                        account_status="차단 설정 확인 필요"
+                vals=[u.get("email",""),meta.get("full_name",""),meta.get("nickname",""),meta.get("phone",""),"인증 완료" if confirmed else "미인증",account_status,u.get("created_at","")[:10],(u.get("last_sign_in_at") or "-")[:10]]
                 for j,v in enumerate(vals):
                     item=QTableWidgetItem(str(v))
                     if j==0: item.setData(Qt.UserRole,u.get("id"))
                     self.members_table.setItem(i,j,item)
-            self.member_status.setText(f"회원 {len(users)}명 표시 중 (최대 100명 조회).")
+            self.member_status.setText(f"회원 {len(users)}명 표시 중 (최대 100명 조회). 인증 여부와 현재 차단 상태를 확인할 수 있습니다.")
             self.log_line(f"회원 목록 {len(users)}명 조회")
         self.run_async(lambda:self.admin_users.list_users(query),done)
     def selected_member(self):
