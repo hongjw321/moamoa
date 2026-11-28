@@ -4,7 +4,7 @@ from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
     QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar)
-from manager.services import SettingsStore, SupabaseService, GitHubService
+from services import SettingsStore, SupabaseService, GitHubService
 
 PINK = "#E66D98"
 DARK = "#493443"
