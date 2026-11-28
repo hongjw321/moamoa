@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
 
     if (action === "add_admin_account") {
       const email = String(body.email || "").trim().toLowerCase();
-      if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return reply({ error: "올바른 이메일 주소를 입력해 주세요." }, 400);
       }
       if (configuredSuperAdmins.includes(email)) {
