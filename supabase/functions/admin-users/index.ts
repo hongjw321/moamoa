@@ -102,6 +102,11 @@ Deno.serve(async (req) => {
 
     if (action === "get_admin_info") {
       await audit("관리자 로그인");
+      const { error: securityError } = await admin.from("admin_security_events").insert({
+        email: actorEmail, event_type: "login_success", result: "success",
+        details: { role: adminRole },
+      });
+      if (securityError) console.error("MOAMOA security event write failed:", securityError.message);
       return reply({
         email: actorEmail,
         role: adminRole,
@@ -143,6 +148,14 @@ Deno.serve(async (req) => {
       if(!data) return reply({error:"일반 관리자 계정을 찾을 수 없습니다."},404);
       await audit("관리자 권한 변경",null,{target_email:email,capabilities:data.capabilities});
       return reply({saved:true,email,capabilities:data.capabilities});
+    }
+
+    if (action === "list_security_events") {
+      const { data, error } = await admin.from("admin_security_events")
+        .select("id,email,event_type,result,details,created_at")
+        .order("created_at", { ascending: false }).limit(500);
+      if (error) throw error;
+      return reply({ events: data || [] });
     }
 
     if (action === "list_admin_accounts") {
