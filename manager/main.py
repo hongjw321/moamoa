@@ -526,6 +526,12 @@ class Manager(QMainWindow):
         activity=QWidget(); vl=QVBoxLayout(activity)
         self.activity_status=QLabel("회원가입·로그인·프로필 변경 및 관리자 작업 이력을 표시합니다."); self.activity_status.setObjectName("muted")
         vl.addWidget(self.activity_status)
+        activity_tools=QHBoxLayout()
+        self.activity_search=QLineEdit(); self.activity_search.setPlaceholderText("이메일 / 활동 / 회원 ID 검색")
+        self.activity_search.textChanged.connect(self.filter_activity_logs)
+        activity_tools.addWidget(self.activity_search,1)
+        activity_tools.addWidget(self.button("CSV 내보내기",self.export_activity_logs))
+        vl.addLayout(activity_tools)
         self.activity_table=QTableWidget(0,5)
         self.activity_table.setHorizontalHeaderLabels(["발생 시각","이메일","활동","회원 ID","상세 정보"])
         self.activity_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -536,6 +542,12 @@ class Manager(QMainWindow):
         errors=QWidget(); el=QVBoxLayout(errors)
         self.error_status=QLabel("관리자 API 및 관리자 프로그램에서 기록한 오류를 표시합니다."); self.error_status.setObjectName("muted")
         el.addWidget(self.error_status)
+        error_tools=QHBoxLayout()
+        self.error_search=QLineEdit(); self.error_search.setPlaceholderText("발생 위치 / 오류 내용 검색")
+        self.error_search.textChanged.connect(self.filter_error_logs)
+        error_tools.addWidget(self.error_search,1)
+        error_tools.addWidget(self.button("CSV 내보내기",self.export_error_logs))
+        el.addLayout(error_tools)
         self.error_table=QTableWidget(0,4)
         self.error_table.setHorizontalHeaderLabels(["발생 시각","발생 위치","오류 내용","상세 정보"])
         self.error_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -611,26 +623,88 @@ class Manager(QMainWindow):
         def done(rows,error):
             if error:
                 self.activity_status.setText("조회 실패: "+error); return
-            self.activity_table.setRowCount(len(rows))
-            for i,row in enumerate(rows):
-                details=json.dumps(row.get("details") or {},ensure_ascii=False)
-                vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("email") or "-",row.get("action") or "-",row.get("user_id") or "-",details[:500]]
-                for j,value in enumerate(vals): self.activity_table.setItem(i,j,QTableWidgetItem(str(value)))
-            self.activity_status.setText(f"회원 활동 로그 {len(rows)}건 표시 (최근 200건)")
+            self._activity_rows=rows or []
+            self.filter_activity_logs()
         self.run_async(self.admin_users.list_activity_logs,done)
+
+    def filter_activity_logs(self):
+        rows=getattr(self,"_activity_rows",[])
+        query=self.activity_search.text().strip().lower()
+        if query:
+            rows=[row for row in rows if query in " ".join([
+                str(row.get("email") or ""),str(row.get("action") or ""),
+                str(row.get("user_id") or ""),json.dumps(row.get("details") or {},ensure_ascii=False)
+            ]).lower()]
+        self.activity_table.setRowCount(len(rows))
+        for i,row in enumerate(rows):
+            details=json.dumps(row.get("details") or {},ensure_ascii=False)
+            vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("email") or "-",row.get("action") or "-",row.get("user_id") or "-",details[:500]]
+            for j,value in enumerate(vals): self.activity_table.setItem(i,j,QTableWidgetItem(str(value)))
+        self.activity_status.setText(f"검색 결과 {len(rows)}건 / 전체 {len(getattr(self,'_activity_rows',[]))}건 · 최근 최대 200건")
+
+    def export_activity_logs(self):
+        rows=getattr(self,"_activity_rows",[])
+        query=self.activity_search.text().strip().lower()
+        if query:
+            rows=[row for row in rows if query in " ".join([
+                str(row.get("email") or ""),str(row.get("action") or ""),
+                str(row.get("user_id") or ""),json.dumps(row.get("details") or {},ensure_ascii=False)
+            ]).lower()]
+        self.export_log_csv(rows,"moamoa-member-activity.csv","회원 활동 내역",
+            ["발생 시각","이메일","활동","회원 ID","상세 정보"],
+            lambda row:[row.get("created_at") or "",row.get("email") or "",row.get("action") or "",row.get("user_id") or "",json.dumps(row.get("details") or {},ensure_ascii=False)])
+
     def load_error_logs(self):
         if not self.require_ops_login(self.error_status): return
         self.error_status.setText("오류 로그를 불러오는 중...")
         def done(rows,error):
             if error:
                 self.error_status.setText("조회 실패: "+error); return
-            self.error_table.setRowCount(len(rows))
-            for i,row in enumerate(rows):
-                details=json.dumps(row.get("details") or {},ensure_ascii=False)
-                vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("source") or "-",row.get("message") or "-",details[:500]]
-                for j,value in enumerate(vals): self.error_table.setItem(i,j,QTableWidgetItem(str(value)))
-            self.error_status.setText(f"오류 로그 {len(rows)}건 표시 (최근 200건)")
+            self._error_rows=rows or []
+            self.filter_error_logs()
         self.run_async(self.admin_users.list_error_logs,done)
+
+    def filter_error_logs(self):
+        rows=getattr(self,"_error_rows",[])
+        query=self.error_search.text().strip().lower()
+        if query:
+            rows=[row for row in rows if query in " ".join([
+                str(row.get("source") or ""),str(row.get("message") or ""),
+                json.dumps(row.get("details") or {},ensure_ascii=False)
+            ]).lower()]
+        self.error_table.setRowCount(len(rows))
+        for i,row in enumerate(rows):
+            details=json.dumps(row.get("details") or {},ensure_ascii=False)
+            vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("source") or "-",row.get("message") or "-",details[:500]]
+            for j,value in enumerate(vals): self.error_table.setItem(i,j,QTableWidgetItem(str(value)))
+        self.error_status.setText(f"검색 결과 {len(rows)}건 / 전체 {len(getattr(self,'_error_rows',[]))}건 · 최근 최대 200건")
+
+    def export_error_logs(self):
+        rows=getattr(self,"_error_rows",[])
+        query=self.error_search.text().strip().lower()
+        if query:
+            rows=[row for row in rows if query in " ".join([
+                str(row.get("source") or ""),str(row.get("message") or ""),
+                json.dumps(row.get("details") or {},ensure_ascii=False)
+            ]).lower()]
+        self.export_log_csv(rows,"moamoa-error-logs.csv","오류 로그",
+            ["발생 시각","발생 위치","오류 내용","상세 정보"],
+            lambda row:[row.get("created_at") or "",row.get("source") or "",row.get("message") or "",json.dumps(row.get("details") or {},ensure_ascii=False)])
+
+    def export_log_csv(self,rows,default_name,title,headers,row_values):
+        if not rows:
+            QMessageBox.information(self,"내보낼 기록 없음","먼저 로그를 새로고침하거나 검색 조건을 확인해 주세요.")
+            return
+        path,_=QFileDialog.getSaveFileName(self,title+" CSV 저장",default_name,"CSV 파일 (*.csv)")
+        if not path: return
+        if not path.lower().endswith(".csv"): path += ".csv"
+        try:
+            with open(path,"w",newline="",encoding="utf-8-sig") as f:
+                writer=csv.writer(f); writer.writerow(headers)
+                for row in rows: writer.writerow(row_values(row))
+            QMessageBox.information(self,"내보내기 완료",f"{title} {len(rows)}건을 저장했습니다.\\n{path}")
+        except Exception as exc:
+            QMessageBox.warning(self,"내보내기 실패",str(exc))
     def admin_accounts_page(self):
         w=QWidget(); l=QVBoxLayout(w)
         l.addWidget(self.title_block("관리자 계정 관리","최고 관리자 전용 · 관리자 등록과 일반 관리자 접근 활성화/비활성화를 관리합니다."))
