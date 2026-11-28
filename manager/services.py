@@ -99,6 +99,19 @@ class AdminUsersService:
         return data.get("records",[])
     def restore_data(self,records):
         return self.request({"action":"restore_data","records":records})
+    def list_announcements(self):
+        return self.request({"action":"list_announcements"}).get("announcements",[])
+    def save_announcement(self,announcement_id,title,body,is_published):
+        return self.request({"action":"save_announcement","id":announcement_id,"title":title,
+                             "body":body,"is_published":is_published})
+    def delete_announcement(self,announcement_id):
+        return self.request({"action":"delete_announcement","id":announcement_id})
+    def list_activity_logs(self):
+        return self.request({"action":"list_activity_logs"}).get("logs",[])
+    def list_error_logs(self):
+        return self.request({"action":"list_error_logs"}).get("logs",[])
+    def report_error(self,source,message):
+        return self.request({"action":"report_error","source":source,"message":message})
 
 class GitHubService:
     def __init__(self,store): self.store=store
