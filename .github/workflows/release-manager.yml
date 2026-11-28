@@ -27,7 +27,18 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path manager/dist/MOAMOA-Manager -DestinationPath MOAMOA-Manager-Windows.zip -Force
       - name: Publish GitHub Release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v${{ inputs.version }}" MOAMOA-Manager-Windows.zip --title "MOAMOA Manager v${{ inputs.version }}" --notes "MOAMOA Manager Windows build. Download the ZIP, extract it, and run MOAMOA-Manager.exe."
+          $tag = "v${{ inputs.version }}"
+          $title = "MOAMOA Manager v${{ inputs.version }}"
+          $notes = "MOAMOA Manager Windows build. Download the ZIP, extract it, and run MOAMOA-Manager.exe."
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag MOAMOA-Manager-Windows.zip --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Release asset upload failed." }
+            gh release edit $tag --title $title --notes $notes
+          } else {
+            gh release create $tag MOAMOA-Manager-Windows.zip --title $title --notes $notes
+          }
