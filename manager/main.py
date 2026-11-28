@@ -38,6 +38,9 @@ class Manager(QMainWindow):
         self.store=SettingsStore(); self.cfg=self.store.load()
         self.github=GitHubService(self.store); self.supabase=SupabaseService(self.cfg)
         self.workers=[]
+        # Create shared widgets before page builders reference them.
+        self.log=QTextEdit(); self.log.setReadOnly(True); self.log.setMaximumHeight(95)
+        self.log.setPlaceholderText("작업 기록이 여기에 표시됩니다.")
         root=QWidget(); self.setCentralWidget(root)
         outer=QHBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
         side=QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(225)
@@ -57,8 +60,6 @@ class Manager(QMainWindow):
         self.header=QLabel("대시보드"); self.header.setObjectName("pageTitle"); cl.addWidget(self.header)
         self.status=QLabel("설정에서 Supabase와 GitHub를 연결해 주세요."); self.status.setObjectName("muted"); cl.addWidget(self.status)
         cl.addSpacing(16); cl.addWidget(self.stack); outer.addWidget(content,1)
-        self.log=QTextEdit(); self.log.setReadOnly(True); self.log.setMaximumHeight(95)
-        self.log.setPlaceholderText("작업 기록이 여기에 표시됩니다.")
         self.go(0); self.refresh_dashboard()
 
     def title_block(self, title, desc):
