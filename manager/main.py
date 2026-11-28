@@ -1,10 +1,11 @@
 import sys
+import json
 from datetime import datetime, timezone
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
-    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog)
+    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
 PINK = "#E66D98"
@@ -282,13 +283,98 @@ class Manager(QMainWindow):
             self.member_status.setText(email+" 회원 계정 삭제 완료"); self.log_line("회원 계정 삭제: "+email); self.load_members()
         self.run_async(lambda:self.admin_users.delete_user(user_id),done)
     def data_page(self):
-        w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("데이터 관리","회원별 저장 데이터의 조회·백업·복구 도구를 준비하는 공간입니다."))
-        box=QGroupBox("현재 지원 범위"); bl=QVBoxLayout(box)
-        for s in ["회원별 데이터 테이블: user_data","접근 제어: Supabase Row Level Security","자동 백업·대량 수정·데이터 삭제: 아직 미구현"]:
-            bl.addWidget(QLabel("• "+s))
-        l.addWidget(box)
-        l.addWidget(self.button("Supabase Table Editor 열기",lambda: QDesktopServices.openUrl(QUrl("https://supabase.com/dashboard/project/gugyczralmtvowfhulqe/editor")),True))
-        l.addStretch(); return w
+        w=QWidget(); l=QVBoxLayout(w)
+        l.addWidget(self.title_block("데이터 관리","회원별 보유 캐릭터·뽑기·출석 데이터를 조회하고 JSON 파일로 백업하거나 복구합니다."))
+        info=QLabel("안내: 백업 파일에는 회원별 서비스 데이터가 포함됩니다. 안전한 장소에 보관하고 외부에 공유하지 마세요.")
+        info.setObjectName("muted"); l.addWidget(info)
+        self.data_status=QLabel("관리자 로그인 후 데이터 목록을 불러올 수 있습니다.")
+        self.data_status.setObjectName("muted"); l.addWidget(self.data_status)
+        tools=QHBoxLayout()
+        tools.addWidget(self.button("데이터 새로고침",self.load_data,True))
+        tools.addWidget(self.button("선택 회원 백업",lambda:self.export_data(True)))
+        tools.addWidget(self.button("전체 데이터 백업",lambda:self.export_data(False)))
+        tools.addWidget(self.button("백업 파일 복구",self.import_data))
+        l.addLayout(tools)
+        self.data_table=QTableWidget(0,7)
+        self.data_table.setHorizontalHeaderLabels(["회원 ID","사용 여부","보유 캐릭터","뽑기 기록","출석 기록","장바구니","최근 수정"])
+        self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.data_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.data_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.data_table.setAlternatingRowColors(True)
+        l.addWidget(self.data_table,1)
+        l.addWidget(self.button("Supabase Table Editor 열기",lambda: QDesktopServices.openUrl(QUrl("https://supabase.com/dashboard/project/gugyczralmtvowfhulqe/editor"))))
+        self._data_records=[]
+        return w
+    def load_data(self):
+        session=self.store.admin_session()
+        if not session.get("access_token"):
+            self.data_status.setText("먼저 회원 관리 페이지에서 관리자 로그인을 해주세요."); return
+        self.data_status.setText("회원 데이터를 불러오는 중...")
+        def done(records,error):
+            if error:
+                self.data_status.setText("데이터 조회 실패: "+error); return
+            self._data_records=records
+            self.data_table.setRowCount(len(records))
+            for i,record in enumerate(records):
+                payload=record.get("payload") or {}
+                vals=[record.get("user_id",""),"사용함" if payload.get("used") else "미사용",
+                    len(payload.get("owned") or []),len(payload.get("history") or []),
+                    len(payload.get("attendance") or []),len(payload.get("cart") or []),
+                    str(record.get("updated_at") or "-")[:19].replace("T"," ")]
+                for j,value in enumerate(vals):
+                    item=QTableWidgetItem(str(value))
+                    if j==0: item.setData(Qt.UserRole,record.get("user_id"))
+                    self.data_table.setItem(i,j,item)
+            self.data_status.setText(f"회원 데이터 {len(records)}건 조회 완료 (한 번에 최대 500건).")
+            self.log_line(f"회원 데이터 {len(records)}건 조회")
+        self.run_async(self.admin_users.list_data,done)
+    def export_data(self,selected_only=False):
+        records=self._data_records
+        if selected_only:
+            row=self.data_table.currentRow()
+            if row<0:
+                QMessageBox.information(self,"회원 선택","백업할 회원의 행을 먼저 선택해 주세요."); return
+            user_id=self.data_table.item(row,0).data(Qt.UserRole)
+            records=[r for r in records if r.get("user_id")==user_id]
+        if not records:
+            QMessageBox.information(self,"백업할 데이터 없음","먼저 데이터 새로고침을 눌러 데이터를 불러와 주세요."); return
+        path,_=QFileDialog.getSaveFileName(self,"MOAMOA 데이터 백업 저장","moamoa-backup.json","JSON 파일 (*.json)")
+        if not path: return
+        backup={"format":"MOAMOA_DATA_BACKUP","version":1,"created_at":datetime.now(timezone.utc).isoformat(),"records":records}
+        try:
+            with open(path,"w",encoding="utf-8") as f: json.dump(backup,f,ensure_ascii=False,indent=2)
+            self.data_status.setText(f"백업 저장 완료: {len(records)}건")
+            self.log_line(f"회원 데이터 백업 저장: {len(records)}건")
+            QMessageBox.information(self,"백업 완료",f"{len(records)}건의 데이터를 백업했습니다.\n{path}")
+        except Exception as exc:
+            QMessageBox.warning(self,"백업 실패",str(exc))
+    def import_data(self):
+        path,_=QFileDialog.getOpenFileName(self,"MOAMOA 백업 파일 선택","","JSON 파일 (*.json)")
+        if not path: return
+        try:
+            with open(path,"r",encoding="utf-8") as f: backup=json.load(f)
+            if backup.get("format")!="MOAMOA_DATA_BACKUP" or backup.get("version")!=1 or not isinstance(backup.get("records"),list):
+                raise ValueError("MOAMOA 백업 파일 형식이 올바르지 않습니다.")
+            records=backup["records"]
+            if not records or len(records)>500: raise ValueError("복구 가능한 데이터는 1~500건입니다.")
+            for item in records:
+                if not isinstance(item,dict) or not item.get("user_id") or not isinstance(item.get("payload"),dict):
+                    raise ValueError("백업 파일의 회원 ID 또는 payload 형식이 올바르지 않습니다.")
+        except Exception as exc:
+            QMessageBox.warning(self,"백업 파일 확인",str(exc)); return
+        answer=QMessageBox.question(self,"데이터 복구 확인",
+            f"{len(records)}건의 회원 데이터를 복구할까요?\n같은 회원의 기존 데이터는 백업 파일 내용으로 덮어씁니다.\n복구 전에 현재 데이터를 먼저 백업하는 것을 권장합니다.",
+            QMessageBox.Yes|QMessageBox.No,QMessageBox.No)
+        if answer!=QMessageBox.Yes: return
+        self.data_status.setText("데이터를 복구하는 중...")
+        def done(result,error):
+            if error:
+                self.data_status.setText("복구 실패: "+error); QMessageBox.warning(self,"복구 실패",error); return
+            self.data_status.setText(f"데이터 복구 완료: {result.get('restored',0)}건")
+            self.log_line(f"회원 데이터 복구 완료: {result.get('restored',0)}건")
+            self.load_data()
+            QMessageBox.information(self,"복구 완료",f"{result.get('restored',0)}건의 데이터를 복구했습니다.")
+        self.run_async(lambda:self.admin_users.restore_data(records),done)
     def github_page(self):
         w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("GitHub 배포","저장소 정보와 GitHub Actions 배포 기록을 확인합니다."))
         self.repo_label=QLabel("저장소: hongjw321/moamoa"); self.run_table=QTableWidget(0,4); self.run_table.setHorizontalHeaderLabels(["워크플로","상태","결과","실행 시각"])
