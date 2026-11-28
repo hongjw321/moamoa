@@ -14,6 +14,9 @@ const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: corsHeaders });
 
 Deno.serve(async (req) => {
+  let adminClient: ReturnType<typeof createClient> | null = null;
+  let currentAction = "unknown";
+  let actorEmail = "";
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return reply({ error: "Method not allowed" }, 405);
 
@@ -40,12 +43,76 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userError } = await userClient.auth.getUser(token);
     if (userError || !user?.email) return reply({ error: "로그인이 만료되었습니다." }, 401);
     if (!allowlist.includes(user.email.toLowerCase())) return reply({ error: "관리자 권한이 없습니다." }, 403);
+    actorEmail = user.email;
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+    adminClient = admin;
     const body = await req.json();
     const action = String(body.action || "");
+    currentAction = action;
+    const audit = async (event: string, userId: string | null = null, details: Record<string, unknown> = {}) => {
+      const { error } = await admin.from("member_activity_logs").insert({
+        user_id: userId, email: actorEmail, action: event,
+        details: { actor: "admin", ...details },
+      });
+      if (error) console.error("MOAMOA audit log write failed:", error.message);
+    };
+
+    if (action === "list_announcements") {
+      const { data, error } = await admin.from("announcements")
+        .select("id,title,body,is_published,created_at,updated_at,published_at")
+        .order("created_at", { ascending: false }).limit(200);
+      if (error) throw error;
+      return reply({ announcements: data || [] });
+    }
+
+    if (action === "save_announcement") {
+      const id = String(body.id || "");
+      const title = String(body.title || "").trim();
+      const content = String(body.body || "").trim();
+      const isPublished = body.is_published === true;
+      if (!title || title.length > 120 || !content || content.length > 10000) {
+        return reply({ error: "제목은 1~120자, 내용은 1~10,000자로 입력해 주세요." }, 400);
+      }
+      const values = {
+        title, body: content, is_published: isPublished,
+        updated_at: new Date().toISOString(),
+        published_at: isPublished ? new Date().toISOString() : null,
+      };
+      const result = id
+        ? await admin.from("announcements").update(values).eq("id", id).select("id").single()
+        : await admin.from("announcements").insert(values).select("id").single();
+      if (result.error) throw result.error;
+      await audit(id ? "공지사항 수정" : "공지사항 등록", null, { announcement_id: result.data.id, title });
+      return reply({ saved: true, id: result.data.id });
+    }
+
+    if (action === "delete_announcement") {
+      const id = String(body.id || "");
+      if (!id) return reply({ error: "공지사항 ID가 필요합니다." }, 400);
+      const { error } = await admin.from("announcements").delete().eq("id", id);
+      if (error) throw error;
+      await audit("공지사항 삭제", null, { announcement_id: id });
+      return reply({ deleted: true });
+    }
+
+    if (action === "list_activity_logs") {
+      const { data, error } = await admin.from("member_activity_logs")
+        .select("id,user_id,email,action,details,created_at")
+        .order("created_at", { ascending: false }).limit(200);
+      if (error) throw error;
+      return reply({ logs: data || [] });
+    }
+
+    if (action === "list_error_logs") {
+      const { data, error } = await admin.from("admin_error_logs")
+        .select("id,source,message,details,created_at")
+        .order("created_at", { ascending: false }).limit(200);
+      if (error) throw error;
+      return reply({ logs: data || [] });
+    }
 
     if (action === "list") {
       const page = Math.max(1, Math.min(1000, Number(body.page) || 1));
@@ -64,6 +131,7 @@ Deno.serve(async (req) => {
           address: u.user_metadata?.address || "",
         },
       }));
+      await audit("회원 목록 조회", null, { count: users.length });
       return reply({ users, page, perPage, total: data.total ?? null });
     }
 
@@ -80,6 +148,7 @@ Deno.serve(async (req) => {
         user_metadata: { ...(existing.user.user_metadata || {}), ...patch },
       });
       if (error) throw error;
+      await audit("회원 정보 수정", userId, { fields: Object.keys(patch) });
       return reply({ updated: true, user_id: data.user.id });
     }
 
@@ -92,6 +161,7 @@ Deno.serve(async (req) => {
       if (!allowedDurations.includes(duration)) return reply({ error: "허용되지 않은 차단 기간입니다." }, 400);
       const { data, error } = await admin.auth.admin.updateUserById(userId, { ban_duration: duration });
       if (error) throw error;
+      await audit("회원 차단", userId, { duration });
       return reply({ banned: true, user_id: data.user.id, banned_until: data.user.banned_until || "" });
     }
 
@@ -101,6 +171,7 @@ Deno.serve(async (req) => {
       if (userId === user.id) return reply({ error: "현재 로그인한 관리자 계정은 차단 해제 대상이 아닙니다." }, 400);
       const { data, error } = await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
       if (error) throw error;
+      await audit("회원 차단 해제", userId);
       return reply({ unbanned: true, user_id: data.user.id });
     }
 
@@ -110,6 +181,7 @@ Deno.serve(async (req) => {
         .order("updated_at", { ascending: false })
         .limit(500);
       if (error) throw error;
+      await audit("회원 데이터 조회", null, { count: (data || []).length });
       return reply({ records: data || [] });
     }
 
@@ -131,6 +203,7 @@ Deno.serve(async (req) => {
       }
       const { error } = await admin.from("user_data").upsert(rows, { onConflict: "user_id" });
       if (error) throw error;
+      await audit("회원 데이터 복구", null, { count: rows.length });
       return reply({ restored: rows.length });
     }
 
@@ -141,12 +214,22 @@ Deno.serve(async (req) => {
       if (body.confirmation !== "DELETE_MEMBER") return reply({ error: "삭제 확인값이 올바르지 않습니다." }, 400);
       const { error } = await admin.auth.admin.deleteUser(userId);
       if (error) throw error;
+      await audit("회원 계정 삭제", null, { deleted_user_id: userId });
       return reply({ deleted: true, user_id: userId });
     }
 
     return reply({ error: "지원하지 않는 요청입니다." }, 400);
   } catch (error) {
     console.error("MOAMOA admin API error:", error);
+    if (adminClient) {
+      const message = error instanceof Error ? error.message : String(error);
+      const { error: logError } = await adminClient.from("admin_error_logs").insert({
+        source: "admin-users:" + currentAction,
+        message: message.slice(0, 1500),
+        details: { action: currentAction, actor_email: actorEmail },
+      });
+      if (logError) console.error("MOAMOA error log write failed:", logError.message);
+    }
     return reply({ error: "관리자 요청을 처리하지 못했습니다. 서버 로그를 확인해 주세요." }, 500);
   }
 });
