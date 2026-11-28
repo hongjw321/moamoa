@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
-    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy)
+    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy, QTabWidget, QCheckBox)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
 PINK = "#E66D98"
@@ -56,7 +56,7 @@ class Manager(QMainWindow):
         sl.addSpacing(22)
         self.stack=QStackedWidget()
         self.pages=[]
-        for label, page in [("대시보드",self.dashboard_page()),("회원 관리",self.members_page()),("데이터 관리",self.data_page()),("GitHub 배포",self.github_page()),("환경 설정",self.settings_page())]:
+        for label, page in [("대시보드",self.dashboard_page()),("회원 관리",self.members_page()),("데이터 관리",self.data_page()),("운영 관리",self.operations_page()),("GitHub 배포",self.github_page()),("환경 설정",self.settings_page())]:
             b=QPushButton(label); b.setObjectName("nav"); b.setCheckable(True)
             b.clicked.connect(lambda checked=False, i=len(self.pages): self.go(i))
             sl.addWidget(b); self.pages.append((b,page)); self.stack.addWidget(page)
@@ -75,11 +75,21 @@ class Manager(QMainWindow):
     def button(self, text, fn, primary=False):
         b=QPushButton(text); b.setObjectName("primary" if primary else "action"); b.clicked.connect(fn); return b
     def go(self, i):
-        self.stack.setCurrentIndex(i); self.header.setText(["대시보드","회원 관리","데이터 관리","GitHub 배포","환경 설정"][i])
+        self.stack.setCurrentIndex(i); self.header.setText(["대시보드","회원 관리","데이터 관리","운영 관리","GitHub 배포","환경 설정"][i])
         for n,(b,_) in enumerate(self.pages): b.setChecked(n==i)
     def run_async(self, fn, callback):
         w=Worker(fn); self.workers.append(w)
-        w.done.connect(lambda result,error: (callback(result,error), self.workers.remove(w) if w in self.workers else None))
+        def completed(result,error):
+            if error: self.capture_error(error)
+            callback(result,error)
+            if w in self.workers: self.workers.remove(w)
+        w.done.connect(completed)
+        w.start()
+    def capture_error(self, message):
+        if not self.store.admin_session().get("access_token"): return
+        w=Worker(lambda:self.admin_users.report_error("manager",str(message)))
+        self.workers.append(w)
+        w.done.connect(lambda result,error: self.workers.remove(w) if w in self.workers else None)
         w.start()
     def log_line(self, text):
         self.log.append(text); self.status.setText(text)
@@ -471,6 +481,141 @@ class Manager(QMainWindow):
             self.load_data()
             QMessageBox.information(self,"복구 완료",f"{result.get('restored',0)}건의 데이터를 복구했습니다.")
         self.run_async(lambda:self.admin_users.restore_data(records),done)
+    def operations_page(self):
+        w=QWidget(); outer=QVBoxLayout(w)
+        outer.addWidget(self.title_block("운영 관리","공지사항을 게시하고 회원 활동 및 시스템 오류 이력을 확인합니다."))
+        self.ops_tabs=QTabWidget()
+        ann=QWidget(); al=QVBoxLayout(ann)
+        self.announcement_status=QLabel("관리자 로그인 후 공지사항을 관리할 수 있습니다."); self.announcement_status.setObjectName("muted")
+        al.addWidget(self.announcement_status)
+        self.announcement_table=QTableWidget(0,3)
+        self.announcement_table.setHorizontalHeaderLabels(["제목","게시 상태","작성일"])
+        self.announcement_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.announcement_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.announcement_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.announcement_table.itemSelectionChanged.connect(self.select_announcement)
+        al.addWidget(self.announcement_table,1)
+        form=QFormLayout()
+        self.announcement_title=QLineEdit(); self.announcement_title.setPlaceholderText("공지사항 제목 (최대 120자)")
+        self.announcement_body=QTextEdit(); self.announcement_body.setPlaceholderText("공지사항 내용을 입력하세요."); self.announcement_body.setMinimumHeight(100)
+        self.announcement_published=QCheckBox("홈페이지에 게시")
+        form.addRow("제목",self.announcement_title); form.addRow("내용",self.announcement_body); form.addRow("",self.announcement_published)
+        al.addLayout(form)
+        ann_buttons=QHBoxLayout()
+        ann_buttons.addWidget(self.button("새 공지 작성",self.new_announcement))
+        ann_buttons.addWidget(self.button("선택 공지 저장",self.save_announcement,True))
+        ann_buttons.addWidget(self.button("선택 공지 삭제",self.delete_announcement))
+        ann_buttons.addWidget(self.button("목록 새로고침",self.load_announcements))
+        al.addLayout(ann_buttons)
+        self.ops_tabs.addTab(ann,"공지사항")
+        activity=QWidget(); vl=QVBoxLayout(activity)
+        self.activity_status=QLabel("회원가입·로그인·프로필 변경 및 관리자 작업 이력을 표시합니다."); self.activity_status.setObjectName("muted")
+        vl.addWidget(self.activity_status)
+        self.activity_table=QTableWidget(0,5)
+        self.activity_table.setHorizontalHeaderLabels(["발생 시각","이메일","활동","회원 ID","상세 정보"])
+        self.activity_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.activity_table.setEditTriggers(QTableWidget.NoEditTriggers); self.activity_table.setAlternatingRowColors(True)
+        vl.addWidget(self.activity_table,1)
+        vl.addWidget(self.button("회원 활동 이력 새로고침",self.load_activity_logs,True))
+        self.ops_tabs.addTab(activity,"회원 활동 로그")
+        errors=QWidget(); el=QVBoxLayout(errors)
+        self.error_status=QLabel("관리자 API 및 관리자 프로그램에서 기록한 오류를 표시합니다."); self.error_status.setObjectName("muted")
+        el.addWidget(self.error_status)
+        self.error_table=QTableWidget(0,4)
+        self.error_table.setHorizontalHeaderLabels(["발생 시각","발생 위치","오류 내용","상세 정보"])
+        self.error_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.error_table.setEditTriggers(QTableWidget.NoEditTriggers); self.error_table.setAlternatingRowColors(True)
+        el.addWidget(self.error_table,1)
+        el.addWidget(self.button("오류 로그 새로고침",self.load_error_logs,True))
+        self.ops_tabs.addTab(errors,"오류 로그")
+        outer.addWidget(self.ops_tabs,1)
+        self._announcements=[]
+        return w
+    def require_ops_login(self,label):
+        if not self.store.admin_session().get("access_token"):
+            label.setText("먼저 회원 관리 페이지에서 관리자 로그인을 해주세요.")
+            return False
+        return True
+    def load_announcements(self):
+        if not self.require_ops_login(self.announcement_status): return
+        self.announcement_status.setText("공지사항을 불러오는 중...")
+        def done(rows,error):
+            if error:
+                self.announcement_status.setText("조회 실패: "+error); return
+            self._announcements=rows; self.announcement_table.setRowCount(len(rows))
+            for i,row in enumerate(rows):
+                vals=[row.get("title",""),"게시 중" if row.get("is_published") else "비공개",str(row.get("created_at") or "-")[:19].replace("T"," ")]
+                for j,value in enumerate(vals):
+                    item=QTableWidgetItem(str(value))
+                    if j==0: item.setData(Qt.UserRole,row.get("id"))
+                    self.announcement_table.setItem(i,j,item)
+            self.announcement_status.setText(f"공지사항 {len(rows)}건 조회 완료")
+        self.run_async(self.admin_users.list_announcements,done)
+    def select_announcement(self):
+        row=self.announcement_table.currentRow()
+        if row<0: return
+        item=self.announcement_table.item(row,0)
+        if not item: return
+        announcement=next((x for x in self._announcements if x.get("id")==item.data(Qt.UserRole)),None)
+        if not announcement: return
+        self.announcement_title.setText(announcement.get("title",""))
+        self.announcement_body.setPlainText(announcement.get("body",""))
+        self.announcement_published.setChecked(bool(announcement.get("is_published")))
+    def new_announcement(self):
+        self.announcement_table.clearSelection()
+        self.announcement_title.clear(); self.announcement_body.clear(); self.announcement_published.setChecked(False)
+        self.announcement_title.setFocus()
+    def save_announcement(self):
+        if not self.require_ops_login(self.announcement_status): return
+        title=self.announcement_title.text().strip(); body=self.announcement_body.toPlainText().strip()
+        if not title or not body:
+            QMessageBox.warning(self,"입력 확인","공지사항 제목과 내용을 입력해 주세요."); return
+        row=self.announcement_table.currentRow()
+        announcement_id=self.announcement_table.item(row,0).data(Qt.UserRole) if row>=0 and self.announcement_table.item(row,0) else None
+        self.announcement_status.setText("공지사항을 저장하는 중...")
+        def done(result,error):
+            if error:
+                self.announcement_status.setText("저장 실패: "+error); QMessageBox.warning(self,"저장 실패",error); return
+            self.announcement_status.setText("공지사항 저장 완료")
+            self.load_announcements()
+        self.run_async(lambda:self.admin_users.save_announcement(announcement_id,title,body,self.announcement_published.isChecked()),done)
+    def delete_announcement(self):
+        row=self.announcement_table.currentRow()
+        if row<0:
+            QMessageBox.information(self,"공지 선택","삭제할 공지사항을 먼저 선택해 주세요."); return
+        item=self.announcement_table.item(row,0); announcement_id=item.data(Qt.UserRole)
+        if QMessageBox.question(self,"공지사항 삭제","선택한 공지사항을 삭제할까요?",QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        def done(result,error):
+            if error:
+                self.announcement_status.setText("삭제 실패: "+error); QMessageBox.warning(self,"삭제 실패",error); return
+            self.new_announcement(); self.load_announcements()
+        self.run_async(lambda:self.admin_users.delete_announcement(announcement_id),done)
+    def load_activity_logs(self):
+        if not self.require_ops_login(self.activity_status): return
+        self.activity_status.setText("회원 활동 이력을 불러오는 중...")
+        def done(rows,error):
+            if error:
+                self.activity_status.setText("조회 실패: "+error); return
+            self.activity_table.setRowCount(len(rows))
+            for i,row in enumerate(rows):
+                details=json.dumps(row.get("details") or {},ensure_ascii=False)
+                vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("email") or "-",row.get("action") or "-",row.get("user_id") or "-",details[:500]]
+                for j,value in enumerate(vals): self.activity_table.setItem(i,j,QTableWidgetItem(str(value)))
+            self.activity_status.setText(f"회원 활동 로그 {len(rows)}건 표시 (최근 200건)")
+        self.run_async(self.admin_users.list_activity_logs,done)
+    def load_error_logs(self):
+        if not self.require_ops_login(self.error_status): return
+        self.error_status.setText("오류 로그를 불러오는 중...")
+        def done(rows,error):
+            if error:
+                self.error_status.setText("조회 실패: "+error); return
+            self.error_table.setRowCount(len(rows))
+            for i,row in enumerate(rows):
+                details=json.dumps(row.get("details") or {},ensure_ascii=False)
+                vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),row.get("source") or "-",row.get("message") or "-",details[:500]]
+                for j,value in enumerate(vals): self.error_table.setItem(i,j,QTableWidgetItem(str(value)))
+            self.error_status.setText(f"오류 로그 {len(rows)}건 표시 (최근 200건)")
+        self.run_async(self.admin_users.list_error_logs,done)
     def github_page(self):
         w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("GitHub 배포","저장소 정보와 GitHub Actions 배포 기록을 확인합니다."))
         self.repo_label=QLabel("저장소: hongjw321/moamoa"); self.run_table=QTableWidget(0,4); self.run_table.setHorizontalHeaderLabels(["워크플로","상태","결과","실행 시각"])
