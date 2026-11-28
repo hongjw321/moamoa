@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     const defaultCapabilities = ["members_read", "announcements_manage", "activity_logs_read"];
     const allowedCapabilities = new Set([
       "members_read", "members_edit", "members_ban", "members_delete",
-      "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read",
+      "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read", "security_logs_read",
     ]);
     const adminCapabilities: string[] = isSuperAdmin
       ? [...allowedCapabilities, "admins_manage"]
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
       delete_user: "members_delete", list_data: "data_read", restore_data: "data_restore",
       list_announcements: "announcements_manage", save_announcement: "announcements_manage",
       delete_announcement: "announcements_manage", list_activity_logs: "activity_logs_read",
-      list_error_logs: "error_logs_read",
+      list_error_logs: "error_logs_read", list_security_events: "security_logs_read",
     };
     const requiredCapability = actionCapability[action];
     if (!isSuperAdmin && requiredCapability && !adminCapabilities.includes(requiredCapability)) {
@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
     if (action === "set_admin_capabilities") {
       const email=String(body.email || "").trim().toLowerCase();
       const requested=body.capabilities;
-      const validCapabilities=["members_read","members_edit","members_ban","members_delete","data_read","data_restore","announcements_manage","activity_logs_read","error_logs_read"];
+      const validCapabilities=["members_read","members_edit","members_ban","members_delete","data_read","data_restore","announcements_manage","activity_logs_read","error_logs_read","security_logs_read"];
       if (!email || !Array.isArray(requested) || requested.some((value: unknown)=>typeof value!=="string" || !validCapabilities.includes(value))) {
         return reply({error:"관리자 이메일 또는 권한 목록이 올바르지 않습니다."},400);
       }
