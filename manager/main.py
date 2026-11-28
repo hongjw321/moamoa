@@ -117,8 +117,18 @@ class Manager(QMainWindow):
             for index, capability in enumerate(tab_caps):
                 self.ops_tabs.setTabVisible(index, capability is None or capability in caps)
         if hasattr(self, "data_tools"):
-            allowed = "data_read" in caps or "data_restore" in caps
-            self.data_tools.setVisible(allowed)
+            self.data_tools.setVisible("data_read" in caps or "data_restore" in caps)
+            for widget_name in ("data_refresh_button", "data_export_selected_button", "data_export_all_button"):
+                widget = getattr(self, widget_name, None)
+                if widget:
+                    widget.setVisible("data_read" in caps)
+            restore_button = getattr(self, "data_restore_button", None)
+            if restore_button:
+                restore_button.setVisible("data_restore" in caps)
+        if hasattr(self, "stack") and len(getattr(self, "pages", [])) == 7:
+            current = self.stack.currentIndex()
+            if current in (2, 3, 4) and not self.pages[current][0].isVisible():
+                self.go(1)
         if hasattr(self, "admin_role_status"):
             if info:
                 label = "최고 관리자" if role == "super_admin" else "일반 관리자"
