@@ -3,8 +3,8 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
-    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar)
-from services import SettingsStore, SupabaseService, GitHubService
+    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog)
+from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
 PINK = "#E66D98"
 DARK = "#493443"
@@ -36,7 +36,7 @@ class Manager(QMainWindow):
         self.setWindowTitle("MOAMOA MANAGER")
         self.resize(1180, 760); self.setMinimumSize(900, 620)
         self.store=SettingsStore(); self.cfg=self.store.load()
-        self.github=GitHubService(self.store); self.supabase=SupabaseService(self.cfg)
+        self.github=GitHubService(self.store); self.supabase=SupabaseService(self.cfg); self.admin_users=AdminUsersService(self.cfg,self.store)
         self.workers=[]
         # Create shared widgets before page builders reference them.
         self.log=QTextEdit(); self.log.setReadOnly(True); self.log.setMaximumHeight(95)
@@ -105,13 +105,116 @@ class Manager(QMainWindow):
             self.log_line("GitHub 저장소 연결 확인 완료")
         self.run_async(gh,done)
     def members_page(self):
-        w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("회원 관리","회원 목록·권한·탈퇴는 별도의 서버 관리자 API를 통해 안전하게 처리합니다."))
-        box=QGroupBox("보안 상태"); bl=QVBoxLayout(box)
-        bl.addWidget(QLabel("현재 공개 홈페이지에는 Supabase 공개 키만 사용합니다. 이 프로그램에도 service_role 키를 입력하지 않습니다."))
-        bl.addWidget(QLabel("회원 검색 및 탈퇴 관리 API는 아직 서버에 배포되지 않았습니다. 준비 전까지 회원 데이터 변경 기능은 잠겨 있습니다."))
-        l.addWidget(box)
-        l.addWidget(self.button("Supabase 대시보드에서 회원 관리 열기",lambda: QDesktopServices.openUrl(QUrl("https://supabase.com/dashboard/project/gugyczralmtvowfhulqe/auth/users")),True))
-        l.addStretch(); return w
+        w=QWidget(); l=QVBoxLayout(w)
+        l.addWidget(self.title_block("회원 관리","관리자 계정으로 인증한 뒤 실제 Supabase 회원 정보를 조회하고 관리합니다."))
+        auth=QGroupBox("관리자 로그인"); form=QFormLayout(auth)
+        self.admin_email=QLineEdit(); self.admin_email.setPlaceholderText("관리자 이메일")
+        self.admin_password=QLineEdit(); self.admin_password.setEchoMode(QLineEdit.Password); self.admin_password.setPlaceholderText("Supabase 로그인 비밀번호")
+        session=self.store.admin_session()
+        if session.get("email"): self.admin_email.setText(session["email"])
+        form.addRow("이메일",self.admin_email); form.addRow("비밀번호",self.admin_password)
+        authrow=QHBoxLayout()
+        authrow.addWidget(self.button("관리자 로그인",self.admin_login,True))
+        authrow.addWidget(self.button("로그아웃",self.admin_logout))
+        authrow.addStretch(); form.addRow(authrow); l.addWidget(auth)
+        self.member_status=QLabel("관리자 로그인 후 회원 목록을 불러올 수 있습니다."); self.member_status.setObjectName("muted"); l.addWidget(self.member_status)
+        tools=QHBoxLayout()
+        self.member_search=QLineEdit(); self.member_search.setPlaceholderText("이메일 / 이름 / 닉네임 검색")
+        self.member_search.returnPressed.connect(self.load_members)
+        tools.addWidget(self.member_search,1)
+        tools.addWidget(self.button("검색 및 새로고침",self.load_members,True))
+        tools.addWidget(self.button("회원 정보 수정",self.edit_member))
+        tools.addWidget(self.button("회원 삭제",self.delete_member))
+        l.addLayout(tools)
+        self.members_table=QTableWidget(0,6)
+        self.members_table.setHorizontalHeaderLabels(["이메일","이름","닉네임","휴대폰","가입일","최근 로그인"])
+        self.members_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._member_map={}\n        self.members_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.members_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.members_table.setAlternatingRowColors(True)
+        l.addWidget(self.members_table,1)
+        l.addWidget(QLabel("보안: 관리자 이메일 허용 목록(MOAMOA_ADMIN_EMAILS)에 등록된 계정만 접근할 수 있습니다. service_role 키는 서버에만 보관됩니다."))
+        return w
+    def admin_login(self):
+        email=self.admin_email.text().strip(); password=self.admin_password.text()
+        if not email or not password:
+            QMessageBox.warning(self,"입력 확인","관리자 이메일과 비밀번호를 입력해 주세요."); return
+        self.member_status.setText("로그인 확인 중...")
+        def work():
+            user=self.supabase.admin_login(email,password,self.store)
+            return self.admin_users.request({"action":"list","page":1,"perPage":1})
+        def done(result,error):
+            self.admin_password.clear()
+            if error:
+                self.store.clear_admin_session(); self.member_status.setText("로그인 실패: "+error); return
+            self.member_status.setText("관리자 인증 완료 · "+email)
+            self.log_line("관리자 인증 완료")
+            self.load_members()
+        self.run_async(work,done)
+        self.admin_password.clear()
+    def admin_logout(self):
+        self.store.clear_admin_session(); self.members_table.setRowCount(0)
+        self.member_status.setText("로그아웃했습니다."); self.log_line("관리자 로그아웃")
+    def load_members(self):
+        session=self.store.admin_session()
+        if not session.get("access_token"):
+            self.member_status.setText("먼저 관리자 로그인을 해주세요."); return
+        query=self.member_search.text()
+        self.member_status.setText("회원 목록을 불러오는 중...")
+        def done(users,error):
+            if error:
+                self.member_status.setText("조회 실패: "+error); return
+            self.members_table.setRowCount(len(users))
+            for i,u in enumerate(users):
+                meta=u.get("user_metadata") or {}
+                vals=[u.get("email",""),meta.get("full_name",""),meta.get("nickname",""),meta.get("phone",""),u.get("created_at","")[:10],(u.get("last_sign_in_at") or "-")[:10]]
+                for j,v in enumerate(vals):
+                    item=QTableWidgetItem(str(v))
+                    if j==0: item.setData(Qt.UserRole,u.get("id"))
+                    self.members_table.setItem(i,j,item)
+            self.member_status.setText(f"회원 {len(users)}명 표시 중 (최대 100명 조회).")
+            self.log_line(f"회원 목록 {len(users)}명 조회")
+        self.run_async(lambda:self.admin_users.list_users(query),done)
+    def selected_member(self):
+        row=self.members_table.currentRow()
+        if row<0: return None
+        item=self.members_table.item(row,0)
+        if not item: return None
+        user_id=item.data(Qt.UserRole)
+        return next((u for u in getattr(self,"_member_cache",[]) if u.get("id")==user_id),{"id":user_id,"email":item.text(),"user_metadata":{}})
+    def edit_member(self):
+        row=self.members_table.currentRow()
+        if row<0:
+            QMessageBox.information(self,"회원 선택","수정할 회원을 먼저 선택해 주세요."); return
+        email=self.members_table.item(row,0).text()
+        user_id=self.members_table.item(row,0).data(Qt.UserRole)
+        current=getattr(self,"_member_map",{}).get(user_id,{})
+        meta=current.get("user_metadata") or {}
+        fields=[("이름","full_name"),("닉네임","nickname"),("휴대폰","phone"),("주소","address")]
+        profile={}
+        for label,key in fields:
+            value,ok=QInputDialog.getText(self,"회원 정보 수정",label,text=str(meta.get(key,"")))
+            if not ok: return
+            profile[key]=value.strip()
+        if not profile["full_name"] or not profile["nickname"]:
+            QMessageBox.warning(self,"입력 확인","이름과 닉네임은 필수입니다."); return
+        self.member_status.setText("회원 정보를 저장하는 중...")
+        def done(result,error):
+            if error: self.member_status.setText("수정 실패: "+error); return
+            self.member_status.setText(email+" 회원 정보 수정 완료"); self.load_members()
+        self.run_async(lambda:self.admin_users.update_profile(user_id,profile),done)
+    def delete_member(self):
+        row=self.members_table.currentRow()
+        if row<0:
+            QMessageBox.information(self,"회원 선택","삭제할 회원을 먼저 선택해 주세요."); return
+        email=self.members_table.item(row,0).text()
+        user_id=self.members_table.item(row,0).data(Qt.UserRole)
+        if QMessageBox.question(self,"회원 계정 영구 삭제",f"{email} 계정을 영구 삭제할까요?\\n연결된 user_data도 함께 삭제되며 복구할 수 없습니다.",QMessageBox.Yes|QMessageBox.No,QMessageBox.No)!=QMessageBox.Yes: return
+        self.member_status.setText("회원 계정을 삭제하는 중...")
+        def done(result,error):
+            if error: self.member_status.setText("삭제 실패: "+error); return
+            self.member_status.setText(email+" 회원 계정 삭제 완료"); self.log_line("회원 계정 삭제: "+email); self.load_members()
+        self.run_async(lambda:self.admin_users.delete_user(user_id),done)
     def data_page(self):
         w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("데이터 관리","회원별 저장 데이터의 조회·백업·복구 도구를 준비하는 공간입니다."))
         box=QGroupBox("현재 지원 범위"); bl=QVBoxLayout(box)
