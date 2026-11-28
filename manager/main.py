@@ -3,6 +3,7 @@ import json
 import csv
 import hashlib
 import hmac
+import os
 from datetime import datetime, timezone, timedelta
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
@@ -132,6 +133,7 @@ class Manager(QMainWindow):
             analytics_tools.addWidget(self.button(label,lambda checked=False,d=days:self.set_analytics_period(d),days==7))
         analytics_tools.addStretch()
         analytics_tools.addWidget(self.button("CSV 내보내기",self.export_activity_analytics_csv))
+        analytics_tools.addWidget(self.button("PDF 운영 보고서",self.export_operations_pdf))
         analytics_tools.addWidget(self.button("분석 새로고침",self.refresh_activity_analytics))
         l.addLayout(analytics_tools)
         analytics_cards=QGridLayout(); analytics_cards.setSpacing(8)
@@ -275,6 +277,64 @@ class Manager(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self,"내보내기 실패",str(exc))
 
+    def export_operations_pdf(self):
+        if not getattr(self,"analytics_table",None) or self.analytics_table.rowCount()==0:
+            QMessageBox.information(self,"PDF 보고서","먼저 운영 분석을 새로고침해 주세요."); return
+        path,_=QFileDialog.getSaveFileName(self,"MOAMOA 운영 보고서 저장",
+            f"MOAMOA_운영보고서_{self.analytics_days}일.pdf","PDF 파일 (*.pdf)")
+        if not path: return
+        if not path.lower().endswith(".pdf"): path += ".pdf"
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import mm
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            font_name="Helvetica"
+            for font_path in (r"C:\Windows\Fonts\malgun.ttf",r"C:\Windows\Fonts\NanumGothic.ttf"):
+                if os.path.exists(font_path):
+                    try: pdfmetrics.registerFont(TTFont("MOAMOAKorean",font_path)); font_name="MOAMOAKorean"; break
+                    except Exception: pass
+            styles=getSampleStyleSheet()
+            title_style=ParagraphStyle("MOAMOATitle",parent=styles["Title"],fontName=font_name,fontSize=18,leading=24)
+            body_style=ParagraphStyle("MOAMOABody",parent=styles["BodyText"],fontName=font_name,fontSize=8,leading=12)
+            story=[Paragraph("MOAMOA 운영 분석 보고서",title_style),
+                Paragraph(f"작성 시각: {datetime.now().astimezone().strftime('%Y-%m-%d %H:%M')} · 분석 기간: 최근 {self.analytics_days}일",body_style),
+                Spacer(1,5*mm)]
+            summary=[["항목","집계"],["전체 활동 기록",self.analytics_total.value.text()],
+                     ["회원가입",self.analytics_signups.value.text()],["로그인",self.analytics_logins.value.text()]]
+            table=Table(summary,colWidths=[55*mm,90*mm])
+            table.setStyle(TableStyle([("FONTNAME",(0,0),(-1,-1),font_name),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#493443")),
+                ("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.4,colors.HexColor("#D8CDD4")),
+                ("PADDING",(0,0),(-1,-1),6),("FONTSIZE",(0,0),(-1,-1),8)]))
+            story += [table,Spacer(1,6*mm),Paragraph("일자별 활동 추이",ParagraphStyle("MOAMOASection",parent=styles["Heading2"],fontName=font_name))]
+            daily=[["날짜","회원가입","로그인","기타 활동"]]
+            for row in range(self.analytics_table.rowCount()):
+                daily.append([self.analytics_table.item(row,col).text() if self.analytics_table.item(row,col) else "" for col in range(4)])
+            daily_table=Table(daily,repeatRows=1,colWidths=[35*mm,35*mm,35*mm,35*mm])
+            daily_table.setStyle(TableStyle([("FONTNAME",(0,0),(-1,-1),font_name),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#493443")),
+                ("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#D8CDD4")),
+                ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,colors.HexColor("#F8F4F6")]),("ALIGN",(1,1),(-1,-1),"RIGHT"),
+                ("FONTSIZE",(0,0),(-1,-1),7),("PADDING",(0,0),(-1,-1),4)]))
+            story += [daily_table,Spacer(1,6*mm)]
+            workload=getattr(self,"admin_workload_table",None)
+            if workload and workload.rowCount():
+                story.append(Paragraph("관리자별 작업량 (최근 조회된 활동 로그 기준)",ParagraphStyle("MOAMOAWTitle",parent=styles["Heading2"],fontName=font_name)))
+                admin_rows=[["관리자 이메일","권한","작업 건수","최근 활동"]]
+                for row in range(workload.rowCount()):
+                    admin_rows.append([workload.item(row,col).text() if workload.item(row,col) else "" for col in range(4)])
+                admin_table=Table(admin_rows,repeatRows=1,colWidths=[65*mm,30*mm,25*mm,55*mm])
+                admin_table.setStyle(TableStyle([("FONTNAME",(0,0),(-1,-1),font_name),("BACKGROUND",(0,0),(-1,0),colors.HexColor("#493443")),
+                    ("TEXTCOLOR",(0,0),(-1,0),colors.white),("GRID",(0,0),(-1,-1),0.3,colors.HexColor("#D8CDD4")),
+                    ("FONTSIZE",(0,0),(-1,-1),7),("PADDING",(0,0),(-1,-1),4)]))
+                story.append(admin_table)
+            SimpleDocTemplate(path,pagesize=landscape(A4),rightMargin=15*mm,leftMargin=15*mm,topMargin=15*mm,bottomMargin=15*mm).build(story)
+            self.log_line(f"PDF 운영 보고서 생성 완료 · 최근 {self.analytics_days}일")
+            QMessageBox.information(self,"PDF 저장 완료",f"운영 보고서를 저장했습니다.\\n{path}")
+        except Exception as exc: QMessageBox.warning(self,"PDF 생성 실패",str(exc))
+
     def refresh_dashboard_stats(self):
         session=self.store.admin_session()
         if not session.get("access_token"):
@@ -410,10 +470,12 @@ class Manager(QMainWindow):
         def done(result,error):
             self.admin_password.clear()
             if error:
+                self.store.record_security_event(email,"실패",str(error)[:300])
                 self.store.clear_admin_session(); self.member_status.setText("로그인 실패: "+error)
                 self.admin_role_status.setText("권한: 확인 실패")
                 self.global_role_status.setText("권한: 확인 실패")
                 return
+            self.store.record_security_event(email,"성공","관리자 인증 완료")
             role=result.get("role","admin")
             role_label="최고 관리자" if role=="super_admin" else "일반 관리자"
             self.member_status.setText("관리자 인증 완료 · "+email)
@@ -983,6 +1045,16 @@ class Manager(QMainWindow):
         el.addWidget(self.error_table,1)
         el.addWidget(self.button("오류 로그 새로고침",self.load_error_logs,True))
         self.ops_tabs.addTab(errors,"오류 로그")
+        security=QWidget(); sl=QVBoxLayout(security)
+        self.security_status=QLabel("이 PC에서 수행한 관리자 로그인 시도만 기록합니다. 비밀번호와 인증 토큰은 저장하지 않습니다.")
+        self.security_status.setObjectName("muted"); self.security_status.setWordWrap(True); sl.addWidget(self.security_status)
+        self.security_table=QTableWidget(0,4)
+        self.security_table.setHorizontalHeaderLabels(["발생 시각","이메일","결과","사유"])
+        self.security_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.security_table.setEditTriggers(QTableWidget.NoEditTriggers); self.security_table.setAlternatingRowColors(True)
+        sl.addWidget(self.security_table,1)
+        sl.addWidget(self.button("보안 기록 새로고침",self.load_security_events,True))
+        self.ops_tabs.addTab(security,"보안 모니터링")
         outer.addWidget(self.ops_tabs,1)
         self._announcements=[]
         return w
@@ -991,6 +1063,16 @@ class Manager(QMainWindow):
             label.setText("먼저 회원 관리 페이지에서 관리자 로그인을 해주세요.")
             return False
         return True
+    def load_security_events(self):
+        if not hasattr(self,"security_table"): return
+        rows=self.store.load_security_events()
+        self.security_table.setRowCount(len(rows))
+        for i,row in enumerate(rows):
+            vals=[str(row.get("created_at") or "-")[:19].replace("T"," "),
+                  row.get("email") or "-",row.get("result") or "-",row.get("reason") or "-"]
+            for j,value in enumerate(vals): self.security_table.setItem(i,j,QTableWidgetItem(str(value)))
+        self.security_status.setText(f"이 PC의 관리자 로그인 시도 {len(rows)}건 · 비밀번호 및 토큰은 기록하지 않습니다.")
+
     def load_announcements(self):
         if not self.require_ops_login(self.announcement_status): return
         self.announcement_status.setText("공지사항을 불러오는 중...")
@@ -1168,6 +1250,7 @@ class Manager(QMainWindow):
         actions=QHBoxLayout()
         actions.addWidget(self.button("선택 관리자 비활성화",lambda:self.change_admin_active(False)))
         actions.addWidget(self.button("선택 관리자 다시 활성화",lambda:self.change_admin_active(True)))
+        actions.addWidget(self.button("선택 관리자 권한 설정",self.configure_admin_capabilities))
         actions.addStretch(); l.addLayout(actions)
         self.admin_accounts_status=QLabel("최고 관리자 로그인 후 목록을 불러올 수 있습니다.")
         self.admin_accounts_status.setObjectName("muted"); l.addWidget(self.admin_accounts_status)
@@ -1300,6 +1383,33 @@ class Manager(QMainWindow):
                     item=QTableWidgetItem(str(value)); self.admin_accounts_table.setItem(i,j,item)
             self.admin_accounts_status.setText(f"관리자 {len(rows)}개 계정 · 최고 관리자 계정은 여기서 비활성화할 수 없습니다.")
         self.run_async(self.admin_users.list_admin_accounts,done)
+
+    def configure_admin_capabilities(self):
+        row=self.admin_accounts_table.currentRow()
+        if row<0 or row not in getattr(self,"_admin_account_rows",{}):
+            QMessageBox.information(self,"계정 선택","권한을 설정할 일반 관리자를 선택해 주세요."); return
+        account=self._admin_account_rows[row]
+        if account.get("role")=="super_admin":
+            QMessageBox.warning(self,"변경 불가","최고 관리자 권한은 여기서 변경할 수 없습니다."); return
+        available={"members_read":"회원 목록 조회","members_edit":"회원 정보 수정","members_ban":"회원 차단 및 해제",
+            "members_delete":"회원 계정 삭제","data_read":"회원 데이터 조회 및 백업","data_restore":"회원 데이터 복구",
+            "announcements_manage":"공지사항 관리","activity_logs_read":"회원 활동 로그 조회","error_logs_read":"오류 로그 조회"}
+        current=account.get("capabilities") or ["members_read","announcements_manage","activity_logs_read"]
+        current_text=", ".join(key for key in available if key in current)
+        value,ok=QInputDialog.getMultiLineText(self,"일반 관리자 권한 설정",
+            "허용할 권한 코드를 쉼표로 구분해 입력하세요.\\n\\n"+
+            "\\n".join(f"{key} — {label}" for key,label in available.items()),current_text)
+        if not ok: return
+        selected=[x.strip() for x in value.split(",") if x.strip()]
+        unknown=[x for x in selected if x not in available]
+        if unknown:
+            QMessageBox.warning(self,"권한 코드 확인","알 수 없는 권한: "+", ".join(unknown)); return
+        email=account.get("email","")
+        if QMessageBox.question(self,"권한 저장",f"{email} 관리자에게 다음 권한을 적용할까요?\\n"+", ".join(selected))!=QMessageBox.Yes: return
+        def done(result,error):
+            if error: QMessageBox.warning(self,"권한 저장 실패",error); return
+            self.admin_accounts_status.setText("관리자 권한 저장 완료"); self.load_admin_accounts()
+        self.run_async(lambda:self.admin_users.set_admin_capabilities(email,selected),done)
 
     def add_admin_account(self):
         email=self.new_admin_email.text().strip().lower()
