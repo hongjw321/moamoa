@@ -129,7 +129,8 @@ class Manager(QMainWindow):
         self.members_table=QTableWidget(0,6)
         self.members_table.setHorizontalHeaderLabels(["이메일","이름","닉네임","휴대폰","가입일","최근 로그인"])
         self.members_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self._member_map={}\n        self.members_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self._member_map={}
+        self.members_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.members_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.members_table.setAlternatingRowColors(True)
         l.addWidget(self.members_table,1)
@@ -165,6 +166,7 @@ class Manager(QMainWindow):
             if error:
                 self.member_status.setText("조회 실패: "+error); return
             self.members_table.setRowCount(len(users))
+            self._member_map={u.get('id'):u for u in users}
             for i,u in enumerate(users):
                 meta=u.get("user_metadata") or {}
                 vals=[u.get("email",""),meta.get("full_name",""),meta.get("nickname",""),meta.get("phone",""),u.get("created_at","")[:10],(u.get("last_sign_in_at") or "-")[:10]]
