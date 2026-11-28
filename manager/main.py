@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
-    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog)
+    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
 PINK = "#E66D98"
@@ -23,11 +23,12 @@ class Worker(QThread):
 class Card(QFrame):
     def __init__(self, title, value="확인 전", subtitle=""):
         super().__init__(); self.setObjectName("card")
-        lay=QVBoxLayout(self); lay.setContentsMargins(18,16,18,16)
-        self.title=QLabel(title); self.title.setObjectName("muted")
-        self.value=QLabel(value); self.value.setObjectName("cardValue")
-        self.sub=QLabel(subtitle); self.sub.setObjectName("muted")
+        lay=QVBoxLayout(self); lay.setContentsMargins(12,10,12,10); lay.setSpacing(5)
+        self.title=QLabel(title); self.title.setObjectName("muted"); self.title.setWordWrap(True)
+        self.value=QLabel(value); self.value.setObjectName("cardValue"); self.value.setWordWrap(True)
+        self.sub=QLabel(subtitle); self.sub.setObjectName("muted"); self.sub.setWordWrap(True)
         lay.addWidget(self.title); lay.addWidget(self.value); lay.addWidget(self.sub)
+        self.setMinimumHeight(88)
     def set_value(self, value, subtitle=None):
         self.value.setText(str(value))
         if subtitle is not None: self.sub.setText(subtitle)
@@ -36,7 +37,7 @@ class Manager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MOAMOA MANAGER")
-        self.resize(1180, 760); self.setMinimumSize(900, 620)
+        self.resize(1180, 760); self.setMinimumSize(760, 540)
         self.store=SettingsStore(); self.cfg=self.store.load()
         self.github=GitHubService(self.store); self.supabase=SupabaseService(self.cfg); self.admin_users=AdminUsersService(self.cfg,self.store)
         self.workers=[]
@@ -45,8 +46,8 @@ class Manager(QMainWindow):
         self.log.setPlaceholderText("작업 기록이 여기에 표시됩니다.")
         root=QWidget(); self.setCentralWidget(root)
         outer=QHBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
-        side=QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(225)
-        sl=QVBoxLayout(side); sl.setContentsMargins(18,24,18,20); sl.setSpacing(9)
+        side=QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(185)
+        sl=QVBoxLayout(side); sl.setContentsMargins(12,20,12,16); sl.setSpacing(8)
         brand=QLabel("MOAMOA"); brand.setObjectName("brand")
         sl.addWidget(brand); sl.addWidget(QLabel("MANAGER  ·  ADMIN DESK"))
         sl.addSpacing(22)
@@ -58,7 +59,7 @@ class Manager(QMainWindow):
             sl.addWidget(b); self.pages.append((b,page)); self.stack.addWidget(page)
         sl.addStretch()
         note=QLabel("안전한 운영을 위한\nMOAMOA 관리 도구"); note.setObjectName("sideNote"); sl.addWidget(note)
-        outer.addWidget(side); content=QWidget(); cl=QVBoxLayout(content); cl.setContentsMargins(28,24,28,24)
+        outer.addWidget(side); content=QWidget(); cl=QVBoxLayout(content); cl.setContentsMargins(16,16,16,16)
         self.header=QLabel("대시보드"); self.header.setObjectName("pageTitle"); cl.addWidget(self.header)
         self.status=QLabel("설정에서 Supabase와 GitHub를 연결해 주세요."); self.status.setObjectName("muted"); cl.addWidget(self.status)
         cl.addSpacing(16); cl.addWidget(self.stack); outer.addWidget(content,1)
@@ -80,37 +81,44 @@ class Manager(QMainWindow):
     def log_line(self, text):
         self.log.append(text); self.status.setText(text)
     def dashboard_page(self):
-        w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("운영 현황","모아모아 홈페이지와 외부 서비스 연결 상태를 확인합니다."))
-        row=QHBoxLayout()
+        scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
+        w=QWidget(); l=QVBoxLayout(w); l.setContentsMargins(4,4,4,12); l.setSpacing(10)
+        l.addWidget(self.title_block("운영 현황","모아모아 홈페이지와 외부 서비스 연결 상태를 확인합니다."))
+        service_grid=QGridLayout(); service_grid.setSpacing(8)
         self.sup_card=Card("SUPABASE 연결"); self.gh_card=Card("GITHUB 저장소"); self.pages_card=Card("최근 배포")
-        for c in (self.sup_card,self.gh_card,self.pages_card): row.addWidget(c)
-        l.addLayout(row)
+        for i,c in enumerate((self.sup_card,self.gh_card,self.pages_card)):
+            service_grid.addWidget(c,i//2,i%2)
+        l.addLayout(service_grid)
         l.addWidget(self.title_block("서비스 통계","회원 및 서비스 데이터 기준 · 관리자 로그인 필요"))
-        stats1=QHBoxLayout()
         self.stat_users=Card("전체 가입 회원","-","최대 100명 조회 기준")
         self.stat_today=Card("오늘 신규 가입","-","조회된 회원 기준")
         self.stat_verified=Card("이메일 인증 완료","-","조회된 회원 기준")
         self.stat_banned=Card("현재 차단 회원","-","조회된 회원 기준")
-        for c in (self.stat_users,self.stat_today,self.stat_verified,self.stat_banned): stats1.addWidget(c)
-        l.addLayout(stats1)
-        stats2=QHBoxLayout()
         self.stat_owned=Card("보유 캐릭터 합계","-","user_data 최대 500건 기준")
         self.stat_draws=Card("뽑기 기록 합계","-","user_data 최대 500건 기준")
         self.stat_attendance=Card("출석 기록 합계","-","user_data 최대 500건 기준")
         self.stat_cart=Card("장바구니 항목 합계","-","user_data 최대 500건 기준")
-        for c in (self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart): stats2.addWidget(c)
-        l.addLayout(stats2)
+        stats_grid=QGridLayout(); stats_grid.setSpacing(8)
+        stat_cards=(self.stat_users,self.stat_today,self.stat_verified,self.stat_banned,
+                    self.stat_owned,self.stat_draws,self.stat_attendance,self.stat_cart)
+        for i,c in enumerate(stat_cards):
+            stats_grid.addWidget(c,i//2,i%2)
+        l.addLayout(stats_grid)
         l.addWidget(self.button("회원·서비스 통계 새로고침",self.refresh_dashboard_stats,True))
         l.addWidget(QLabel("최근 가입 회원"))
         self.recent_members=QTableWidget(0,4)
         self.recent_members.setHorizontalHeaderLabels(["이메일","이름","닉네임","가입일"])
-        self.recent_members.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.recent_members.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.recent_members.setColumnWidth(0,240); self.recent_members.setColumnWidth(1,100)
+        self.recent_members.setColumnWidth(2,110); self.recent_members.setColumnWidth(3,100)
         self.recent_members.setEditTriggers(QTableWidget.NoEditTriggers)
         self.recent_members.setMaximumHeight(190)
         l.addWidget(self.recent_members)
         l.addWidget(self.button("전체 연결 상태 확인",self.refresh_dashboard))
         l.addWidget(QLabel("최근 작업")); l.addWidget(self.log)
-        l.addStretch(); return w
+        l.addStretch()
+        scroll.setWidget(w)
+        return scroll
     def refresh_dashboard(self):
         self.sup_card.set_value("확인 중...")
         self.gh_card.set_value("확인 중...")
@@ -507,11 +515,11 @@ def main():
     #sidebar{background:#FFF0F6;border-right:1px solid #F4D9E4}
     #brand{font-size:25px;font-weight:900;color:#D85F8B}
     #sideNote{color:#A27F91;font-size:11px}
-    #pageTitle{font-size:25px;font-weight:800;color:#493443}
-    #sectionTitle{font-size:20px;font-weight:800}
+    #pageTitle{font-size:22px;font-weight:800;color:#493443}
+    #sectionTitle{font-size:18px;font-weight:800}
     #muted{color:#9B8792;font-size:12px}
     #card{background:white;border:1px solid #F3DDE6;border-radius:16px}
-    #cardValue{font-size:19px;font-weight:800;color:#D85F8B}
+    #cardValue{font-size:17px;font-weight:800;color:#D85F8B}
     QPushButton{border:1px solid #F0D5E0;border-radius:10px;padding:10px 14px;background:white}
     QPushButton:hover{background:#FFF0F6}
     QPushButton#nav{border:0;text-align:left;padding:12px;color:#765D6B;background:transparent}
