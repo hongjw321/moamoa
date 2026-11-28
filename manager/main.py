@@ -401,6 +401,8 @@ class Manager(QMainWindow):
         per_page=100
         if total is not None and self.member_page*per_page>=total:
             return
+        if total is None and getattr(self,"_member_page_count",0)<per_page:
+            return
         self.member_page+=1
         self.load_members()
 
@@ -417,6 +419,7 @@ class Manager(QMainWindow):
             if error:
                 self.member_status.setText("조회 실패: "+error); return
             users=result.get("users",[])
+            self._member_page_count=len(users)
             self._member_total=result.get("total")
             self.members_table.setRowCount(len(users))
             self._member_map={u.get('id'):u for u in users}
