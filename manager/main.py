@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QStackedWidget, QLineEdit, QMessageBox, QTextEdit,
-    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout)
+    QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
 PINK = "#E66D98"
@@ -28,7 +28,7 @@ class Card(QFrame):
         self.value=QLabel(value); self.value.setObjectName("cardValue"); self.value.setWordWrap(True)
         self.sub=QLabel(subtitle); self.sub.setObjectName("muted"); self.sub.setWordWrap(True)
         lay.addWidget(self.title); lay.addWidget(self.value); lay.addWidget(self.sub)
-        self.setMinimumHeight(88)
+        self.setMinimumHeight(112); self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)\n        for label in (self.title, self.value, self.sub):\n            label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Minimum)\n            label.setMinimumWidth(0)
     def set_value(self, value, subtitle=None):
         self.value.setText(str(value))
         if subtitle is not None: self.sub.setText(subtitle)
@@ -37,7 +37,7 @@ class Manager(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("MOAMOA MANAGER")
-        self.resize(1180, 760); self.setMinimumSize(760, 540)
+        self.resize(1180, 760); self.setMinimumSize(680, 500)
         self.store=SettingsStore(); self.cfg=self.store.load()
         self.github=GitHubService(self.store); self.supabase=SupabaseService(self.cfg); self.admin_users=AdminUsersService(self.cfg,self.store)
         self.workers=[]
@@ -46,7 +46,7 @@ class Manager(QMainWindow):
         self.log.setPlaceholderText("작업 기록이 여기에 표시됩니다.")
         root=QWidget(); self.setCentralWidget(root)
         outer=QHBoxLayout(root); outer.setContentsMargins(0,0,0,0); outer.setSpacing(0)
-        side=QFrame(); side.setObjectName("sidebar"); side.setFixedWidth(185)
+        side=QFrame(); side.setObjectName("sidebar"); side.setMinimumWidth(145); side.setMaximumWidth(185)
         sl=QVBoxLayout(side); sl.setContentsMargins(12,20,12,16); sl.setSpacing(8)
         brand=QLabel("MOAMOA"); brand.setObjectName("brand")
         sl.addWidget(brand); sl.addWidget(QLabel("MANAGER  ·  ADMIN DESK"))
@@ -59,15 +59,15 @@ class Manager(QMainWindow):
             sl.addWidget(b); self.pages.append((b,page)); self.stack.addWidget(page)
         sl.addStretch()
         note=QLabel("안전한 운영을 위한\nMOAMOA 관리 도구"); note.setObjectName("sideNote"); sl.addWidget(note)
-        outer.addWidget(side); content=QWidget(); cl=QVBoxLayout(content); cl.setContentsMargins(16,16,16,16)
-        self.header=QLabel("대시보드"); self.header.setObjectName("pageTitle"); cl.addWidget(self.header)
-        self.status=QLabel("설정에서 Supabase와 GitHub를 연결해 주세요."); self.status.setObjectName("muted"); cl.addWidget(self.status)
+        outer.addWidget(side); content=QWidget(); cl=QVBoxLayout(content); cl.setContentsMargins(12,12,12,12)
+        self.header=QLabel("대시보드"); self.header.setObjectName("pageTitle"); self.header.setWordWrap(True); cl.addWidget(self.header)
+        self.status=QLabel("설정에서 Supabase와 GitHub를 연결해 주세요."); self.status.setObjectName("muted"); self.status.setWordWrap(True); cl.addWidget(self.status)
         cl.addSpacing(16); cl.addWidget(self.stack); outer.addWidget(content,1)
         self.go(0); self.refresh_dashboard()
 
     def title_block(self, title, desc):
         w=QWidget(); l=QVBoxLayout(w); l.setContentsMargins(0,0,0,12)
-        t=QLabel(title); t.setObjectName("sectionTitle"); d=QLabel(desc); d.setObjectName("muted")
+        t=QLabel(title); t.setObjectName("sectionTitle"); t.setWordWrap(True); d=QLabel(desc); d.setObjectName("muted"); d.setWordWrap(True)
         l.addWidget(t); l.addWidget(d); return w
     def button(self, text, fn, primary=False):
         b=QPushButton(text); b.setObjectName("primary" if primary else "action"); b.clicked.connect(fn); return b
