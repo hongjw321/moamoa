@@ -1,6 +1,7 @@
 import sys
 import json
 import csv
+import hashlib
 from datetime import datetime, timezone, timedelta
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QFont
@@ -9,6 +10,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
     QFormLayout, QGroupBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QInputDialog, QFileDialog, QScrollArea, QGridLayout, QSizePolicy, QTabWidget, QCheckBox, QComboBox, QAbstractItemView)
 from services import SettingsStore, SupabaseService, GitHubService, AdminUsersService
 
+APP_VERSION = "1.1.0"
 PINK = "#E66D98"
 DARK = "#493443"
 MUTED = "#8C7885"
@@ -69,6 +71,7 @@ class Manager(QMainWindow):
         self.global_role_status=QLabel("권한: 로그인 필요"); self.global_role_status.setObjectName("roleStatus"); self.global_role_status.setWordWrap(True); cl.addWidget(self.global_role_status)
         cl.addSpacing(16); cl.addWidget(self.stack); outer.addWidget(content,1)
         self.go(0); self.refresh_dashboard()
+        self.check_for_updates(silent=True)
 
     def title_block(self, title, desc):
         w=QWidget(); l=QVBoxLayout(w); l.setContentsMargins(0,0,0,12)
@@ -856,7 +859,9 @@ class Manager(QMainWindow):
             QMessageBox.information(self,"백업할 데이터 없음","먼저 데이터 새로고침을 눌러 데이터를 불러와 주세요."); return
         path,_=QFileDialog.getSaveFileName(self,"MOAMOA 데이터 백업 저장","moamoa-backup.json","JSON 파일 (*.json)")
         if not path: return
-        backup={"format":"MOAMOA_DATA_BACKUP","version":1,"created_at":datetime.now(timezone.utc).isoformat(),"records":records}
+        canonical=json.dumps(records,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+        backup={"format":"MOAMOA_DATA_BACKUP","version":1,"created_at":datetime.now(timezone.utc).isoformat(),
+                "records":records,"sha256":hashlib.sha256(canonical).hexdigest()}
         try:
             with open(path,"w",encoding="utf-8") as f: json.dump(backup,f,ensure_ascii=False,indent=2)
             self.store.record_backup(path,len(records),"선택 회원 백업" if selected_only else "파일 내보내기")
@@ -870,11 +875,20 @@ class Manager(QMainWindow):
         path,_=QFileDialog.getOpenFileName(self,"MOAMOA 백업 파일 선택","","JSON 파일 (*.json)")
         if not path: return
         try:
+            legacy_backup=False
             with open(path,"r",encoding="utf-8") as f: backup=json.load(f)
-            if backup.get("format")!="MOAMOA_DATA_BACKUP" or backup.get("version")!=1 or not isinstance(backup.get("records"),list):
+            if not isinstance(backup,dict) or backup.get("format")!="MOAMOA_DATA_BACKUP" or backup.get("version")!=1 or not isinstance(backup.get("records"),list):
                 raise ValueError("MOAMOA 백업 파일 형식이 올바르지 않습니다.")
             records=backup["records"]
             if not records or len(records)>500: raise ValueError("복구 가능한 데이터는 1~500건입니다.")
+            expected_digest=backup.get("sha256")
+            if expected_digest:
+                canonical=json.dumps(records,ensure_ascii=False,sort_keys=True,separators=(",",":")).encode("utf-8")
+                actual_digest=hashlib.sha256(canonical).hexdigest()
+                if not isinstance(expected_digest,str) or not hashlib.compare_digest(expected_digest,actual_digest):
+                    raise ValueError("백업 파일 무결성 검사에 실패했습니다. 파일이 손상되었거나 내용이 변경되었을 수 있어 복구를 중단합니다.")
+            else:
+                legacy_backup=True
             for item in records:
                 if not isinstance(item,dict) or not item.get("user_id") or not isinstance(item.get("payload"),dict):
                     raise ValueError("백업 파일의 회원 ID 또는 payload 형식이 올바르지 않습니다.")
@@ -1317,13 +1331,68 @@ class Manager(QMainWindow):
         self.run_async(lambda:self.admin_users.set_admin_active(email,active),done)
 
     def github_page(self):
-        w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("GitHub 배포","저장소 정보와 GitHub Actions 배포 기록을 확인합니다."))
+        w=QWidget(); l=QVBoxLayout(w); l.addWidget(self.title_block("GitHub 배포","저장소 정보, 배포 기록, 프로그램 업데이트를 확인합니다."))
+        self.update_status=QLabel(f"현재 프로그램 버전: v{APP_VERSION} · 업데이트 확인 전")
+        self.update_status.setObjectName("muted"); self.update_status.setWordWrap(True); l.addWidget(self.update_status)
         self.repo_label=QLabel("저장소: hongjw321/moamoa"); self.run_table=QTableWidget(0,4); self.run_table.setHorizontalHeaderLabels(["워크플로","상태","결과","실행 시각"])
         self.run_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         l.addWidget(self.repo_label); l.addWidget(self.run_table)
         row=QHBoxLayout(); row.addWidget(self.button("저장소 열기",lambda: QDesktopServices.openUrl(QUrl("https://github.com/hongjw321/moamoa"))))
         row.addWidget(self.button("Actions 열기",lambda: QDesktopServices.openUrl(QUrl("https://github.com/hongjw321/moamoa/actions"))))
-        row.addWidget(self.button("배포 기록 새로고침",self.load_runs,True)); l.addLayout(row); l.addStretch(); return w
+        row.addWidget(self.button("배포 기록 새로고침",self.load_runs,True))
+        row.addWidget(self.button("업데이트 확인",lambda:self.check_for_updates(silent=False)))
+        l.addLayout(row); l.addStretch(); return w
+
+    def _version_tuple(self,value):
+        parts=[]
+        for part in str(value or "").strip().lstrip("vV").split("."):
+            digits="".join(ch for ch in part if ch.isdigit())
+            if not digits: break
+            parts.append(int(digits))
+        return tuple((parts+[0,0,0])[:3])
+
+    def check_for_updates(self,silent=False):
+        self.update_status.setText(f"현재 버전 v{APP_VERSION} · 최신 버전 확인 중...")
+        def work():
+            try:
+                return self.github._get("releases/latest")
+            except Exception as exc:
+                message=str(exc)
+                if "HTTP 404" in message:
+                    return {"_no_release":True}
+                raise
+        def done(release,error):
+            if error:
+                self.update_status.setText("업데이트 확인 실패 · 인터넷 또는 GitHub 연결을 확인해 주세요.")
+                if not silent:
+                    QMessageBox.warning(self,"업데이트 확인 실패",error)
+                return
+            if release.get("_no_release"):
+                self.update_status.setText(f"현재 버전 v{APP_VERSION} · GitHub Release가 아직 등록되지 않았습니다.")
+                if not silent:
+                    QMessageBox.information(self,"업데이트 확인","아직 공개된 업데이트가 없습니다. GitHub Releases에 새 버전이 등록되면 여기서 확인할 수 있습니다.")
+                return
+            latest=str(release.get("tag_name") or "").strip()
+            if not latest:
+                self.update_status.setText("최신 버전 정보를 읽을 수 없습니다.")
+                return
+            newer=self._version_tuple(latest)>self._version_tuple(APP_VERSION)
+            release_url=release.get("html_url") or "https://github.com/hongjw321/moamoa/releases"
+            self.latest_release_url=release_url
+            if newer:
+                self.update_status.setText(f"새 버전 발견 · {latest} (현재 v{APP_VERSION})")
+                if not silent or newer:
+                    answer=QMessageBox.question(self,"MOAMOA Manager 업데이트",
+                        f"새 버전 {latest}이(가) 등록되었습니다.\\n현재 버전: v{APP_VERSION}\\n\\nGitHub 배포 페이지를 열까요?",
+                        QMessageBox.Yes|QMessageBox.No,QMessageBox.Yes)
+                    if answer==QMessageBox.Yes:
+                        QDesktopServices.openUrl(QUrl(release_url))
+            else:
+                self.update_status.setText(f"최신 버전 사용 중 · v{APP_VERSION}")
+                if not silent:
+                    QMessageBox.information(self,"업데이트 확인",f"현재 v{APP_VERSION}은 최신 버전입니다.")
+        self.run_async(work,done)
+
     def load_runs(self):
         self.run_async(self.github.latest_runs, self.show_runs)
     def show_runs(self,runs,error):
