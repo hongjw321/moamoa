@@ -31,6 +31,8 @@ Deno.serve(async (req) => {
     const serviceRoleKey = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     const allowlist = (Deno.env.get("MOAMOA_ADMIN_EMAILS") || "")
       .split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+    const configuredSuperAdmins = (Deno.env.get("MOAMOA_SUPER_ADMIN_EMAILS") || "")
+      .split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
     if (!supabaseUrl || !anonKey || !serviceRoleKey || allowlist.length === 0) {
       return reply({ error: "관리자 API 서버 설정이 완료되지 않았습니다." }, 500);
     }
@@ -42,7 +44,11 @@ Deno.serve(async (req) => {
     });
     const { data: { user }, error: userError } = await userClient.auth.getUser(token);
     if (userError || !user?.email) return reply({ error: "로그인이 만료되었습니다." }, 401);
-    if (!allowlist.includes(user.email.toLowerCase())) return reply({ error: "관리자 권한이 없습니다." }, 403);
+    const normalizedEmail = user.email.toLowerCase();
+    if (!allowlist.includes(normalizedEmail)) return reply({ error: "관리자 권한이 없습니다." }, 403);
+    // Backward compatibility: existing allowlisted admins retain full access until the super-admin list is configured.
+    const isSuperAdmin = configuredSuperAdmins.length === 0 || configuredSuperAdmins.includes(normalizedEmail);
+    const adminRole = isSuperAdmin ? "super_admin" : "admin";
     actorEmail = user.email;
 
     const admin = createClient(supabaseUrl, serviceRoleKey, {
@@ -55,10 +61,28 @@ Deno.serve(async (req) => {
     const audit = async (event: string, userId: string | null = null, details: Record<string, unknown> = {}) => {
       const { error } = await admin.from("member_activity_logs").insert({
         user_id: userId, email: actorEmail, action: event,
-        details: { actor: "admin", ...details },
+        details: { actor: "admin", actor_email: actorEmail, admin_role: adminRole, ...details },
       });
       if (error) console.error("MOAMOA audit log write failed:", error.message);
     };
+
+    if (action === "get_admin_info") {
+      return reply({
+        email: actorEmail,
+        role: adminRole,
+        capabilities: isSuperAdmin
+          ? ["members_read", "members_edit", "members_ban", "members_delete", "data_read", "data_restore", "announcements_manage", "activity_logs_read", "error_logs_read"]
+          : ["members_read", "announcements_manage", "activity_logs_read"],
+      });
+    }
+
+    const superAdminOnlyActions = new Set([
+      "update_profile", "ban_user", "unban_user", "list_data",
+      "restore_data", "delete_user", "list_error_logs",
+    ]);
+    if (!isSuperAdmin && superAdminOnlyActions.has(action)) {
+      return reply({ error: "이 작업은 최고 관리자 권한이 필요합니다." }, 403);
+    }
 
     if (action === "list_announcements") {
       const { data, error } = await admin.from("announcements")
