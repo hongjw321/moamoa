@@ -202,11 +202,33 @@ Deno.serve(async (req) => {
     }
 
     if (action === "list_activity_logs") {
-      const { data, error } = await admin.from("member_activity_logs")
-        .select("id,user_id,email,action,details,created_at")
-        .order("created_at", { ascending: false }).limit(200);
-      if (error) throw error;
-      return reply({ logs: data || [] });
+      const analytics = body.analytics === true;
+      const days = Math.max(1, Math.min(365, Number(body.days) || 30));
+      if (!analytics) {
+        const { data, error } = await admin.from("member_activity_logs")
+          .select("id,user_id,email,action,details,created_at")
+          .order("created_at", { ascending: false }).limit(200);
+        if (error) throw error;
+        return reply({ logs: data || [], limited: true });
+      }
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const logs: any[] = [];
+      let offset = 0;
+      const pageSize = 1000;
+      while (offset < 10000) {
+        const { data, error } = await admin.from("member_activity_logs")
+          .select("id,user_id,email,action,details,created_at")
+          .gte("created_at", since)
+          .order("created_at", { ascending: false })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        const batch = data || [];
+        logs.push(...batch);
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+      }
+      await audit("운영 분석 조회", null, { days, count: logs.length, capped: logs.length >= 10000 });
+      return reply({ logs, limited: logs.length >= 10000, days });
     }
 
     if (action === "report_error") {
